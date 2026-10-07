@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Afyora Clinical AI{% endblock %}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172d2b;
+        --muted: #5c706d;
+        --paper: #f3f7f4;
+        --surface: #fff;
+        --line: #d7e2dc;
+        --green: #176b55;
+        --green-dark: #10513f;
+        --red: #a33f35;
+        font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+      }
+      a {
+        color: var(--green-dark);
+      }
+      .topbar {
+        border-bottom: 1px solid var(--line);
+        background: var(--surface);
+      }
+      .topbar-inner {
+        max-width: 980px;
+        min-height: 68px;
+        margin: auto;
+        padding: 0 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+      .brand {
+        color: var(--ink);
+        font-family: Georgia, serif;
+        font-size: 20px;
+        text-decoration: none;
+      }
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .nav form {
+        margin: 0;
+      }
+      .nav button {
+        border: 0;
+        padding: 0;
+        background: transparent;
+        color: var(--green-dark);
+        font: inherit;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      main {
+        max-width: 980px;
+        margin: 48px auto;
+        padding: 0 24px 60px;
+      }
+      h1,
+      h2 {
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 500;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 36px;
+      }
+      h2 {
+        margin: 0 0 16px;
+        font-size: 24px;
+      }
+      .intro {
+        max-width: 650px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      .columns {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+        gap: 48px;
+        align-items: start;
+      }
+      .section {
+        padding: 28px 0;
+        border-top: 1px solid var(--line);
+      }
+      .auth-panel {
+        width: min(100%, 480px);
+        margin: 0 auto;
+      }
+      label {
+        display: block;
+        margin: 18px 0 6px;
+        font-size: 14px;
+        font-weight: 650;
+      }
+      input {
+        width: 100%;
+        min-height: 44px;
+        padding: 10px 12px;
+        border: 1px solid #adbfb7;
+        border-radius: 4px;
+        background: var(--surface);
+        color: var(--ink);
+        font: inherit;
+      }
+      input:focus {
+        outline: 3px solid #a9d6c6;
+        border-color: var(--green);
+      }
+      button,
+      .button {
+        display: inline-flex;
+        min-height: 42px;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 16px;
+        border: 0;
+        border-radius: 4px;
+        background: var(--green);
+        color: white;
+        font: inherit;
+        font-weight: 650;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      button:hover,
+      .button:hover {
+        background: var(--green-dark);
+      }
+      .form-submit {
+        margin-top: 22px;
+      }
+      .errorlist {
+        color: var(--red);
+        padding-left: 20px;
+      }
+      .help,
+      .muted {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .notice {
+        margin: 20px 0;
+        padding: 16px;
+        border-left: 4px solid var(--green);
+        background: #e5f1eb;
+      }
+      .notice.error {
+        border-color: var(--red);
+        background: #f8e9e6;
+      }
+      .token {
+        display: block;
+        margin: 12px 0;
+        padding: 14px;
+        overflow-wrap: anywhere;
+        background: #fff;
+        border: 1px solid var(--line);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .integration {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 20px;
+        align-items: center;
+        padding: 18px 0;
+        border-top: 1px solid var(--line);
+      }
+      .integration h3 {
+        margin: 0 0 6px;
+        font-size: 17px;
+      }
+      .status {
+        font-size: 13px;
+        color: var(--green-dark);
+      }
+      .status.inactive {
+        color: var(--muted);
+      }
+      button.secondary {
+        min-height: 36px;
+        padding: 7px 12px;
+        border: 1px solid var(--line);
+        background: white;
+        color: var(--red);
+      }
+      button.secondary:hover {
+        border-color: var(--red);
+        background: #fff8f6;
+      }
+      .guide-link {
+        display: inline-flex;
+        margin: 12px 0 4px;
+        padding: 9px 13px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: white;
+        font-size: 14px;
+        font-weight: 650;
+        text-decoration: none;
+      }
+      .language-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 24px 0 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .language-tabs button {
+        min-height: 38px;
+        padding: 8px 13px;
+        border-radius: 4px 4px 0 0;
+        background: transparent;
+        color: var(--muted);
+      }
+      .language-tabs button:hover {
+        background: #e6eee9;
+        color: var(--ink);
+      }
+      .language-tabs button[aria-selected="true"] {
+        background: var(--green);
+        color: white;
+      }
+      .code-panel {
+        padding: 16px 0 24px;
+      }
+      .code-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .code-toolbar h2 {
+        margin: 0;
+        font-size: 21px;
+      }
+      .code-toolbar button {
+        min-height: 34px;
+        padding: 6px 11px;
+      }
+      pre {
+        max-height: 520px;
+        overflow: auto;
+        margin: 12px 0;
+        padding: 18px;
+        border: 1px solid #263d39;
+        border-radius: 4px;
+        background: #152724;
+        color: #e5f2ec;
+        font:
+          13px/1.6 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        tab-size: 4;
+      }
+      pre code {
+        font: inherit;
+        white-space: pre;
+      }
+      .guide-note {
+        margin: 20px 0;
+        padding: 16px 0;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      textarea {
+        display: block;
+        width: 100%;
+        min-height: 360px;
+        padding: 14px;
+        border: 1px solid #adbfb7;
+        border-radius: 4px;
+        background: #fff;
+        color: var(--ink);
+        font:
+          13px/1.55 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        resize: vertical;
+      }
+      textarea:focus {
+        outline: 3px solid #a9d6c6;
+        border-color: var(--green);
+      }
+      .sandbox-warning {
+        padding: 16px 18px;
+        border-left: 4px solid #a55b21;
+        background: #fbf0e4;
+        line-height: 1.6;
+      }
+      .sandbox-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+        gap: 40px;
+        align-items: start;
+      }
+      .sandbox-result {
+        border-top: 1px solid var(--line);
+        padding: 24px 0;
+      }
+      .result-heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .risk {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 4px 10px;
+        border-radius: 3px;
+        background: #e5f1eb;
+        color: var(--green-dark);
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .risk.moderate {
+        background: #fbf0e4;
+        color: #754010;
+      }
+      .risk.high,
+      .risk.critical {
+        background: #f8e9e6;
+        color: #8c3029;
+      }
+      .result-list {
+        padding-left: 20px;
+        line-height: 1.55;
+      }
+      .result-list li + li {
+        margin-top: 7px;
+      }
+      .result-block {
+        padding: 18px 0;
+        border-top: 1px solid var(--line);
+      }
+      .result-block h3 {
+        margin: 0 0 10px;
+        font-size: 16px;
+      }
+      .result-condition {
+        padding: 12px 0;
+        border-top: 1px solid var(--line);
+      }
+      .result-condition:first-of-type {
+        border-top: 0;
+      }
+      ul.errorlist + input {
+        border-color: var(--red);
+      }
+      @media (max-width: 680px) {
+        .topbar-inner {
+          padding: 0 18px;
+        }
+        main {
+          margin: 32px auto;
+          padding: 0 18px 40px;
+        }
+        h1 {
+          font-size: 30px;
+        }
+        .columns {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+        .sandbox-layout {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+        textarea {
+          min-height: 280px;
+        }
+        .integration {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="{% url 'home' %}">Afyora Clinical AI</a>
+        <nav class="nav" aria-label="Account">
+          {% if user.is_authenticated %}
+          <a href="{% url 'integration-dashboard' %}">Integrations</a>
+          <a href="{% url 'integration-guide' %}">API guide</a>
+          <a href="{% url 'clinical-sandbox' %}">AI sandbox</a>
+          <form method="post" action="{% url 'account-logout' %}">
+            {% csrf_token %}<button type="submit">Sign out</button>
+          </form>
+          {% else %}
+          <a href="{% url 'account-login' %}">Sign in</a>
+          {% endif %}
+        </nav>
+      </div>
+    </header>
+    <main>
+      {% if messages %} {% for message in messages %}
+      <div class="notice">{{ message }}</div>
+      {% endfor %} {% endif %} {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

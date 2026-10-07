@@ -1,0 +1,85 @@
+{% extends "clinicalDecisionAI/base.html" %} {% block title %}Integrations |
+Afyora Clinical AI{% endblock %} {% block content %}
+<p class="muted">DEVELOPER CONSOLE</p>
+<h1>Your integrations</h1>
+<p class="intro">
+  Register a server-side application to access the Clinical AI API. Each
+  integration has its own revocable bearer token.
+</p>
+<a class="guide-link" href="{% url 'integration-guide' %}"
+  >View API examples by language</a
+>
+<a class="guide-link" href="{% url 'clinical-sandbox' %}"
+  >Try a sandbox analysis</a
+>
+
+{% if issued_token %}
+<section class="notice" aria-live="polite">
+  <h2>Copy this token now</h2>
+  <p>
+    This credential is shown only once. Store it in your application's
+    server-side secret manager. It cannot be recovered from Afyora.
+  </p>
+  <code class="token">{{ issued_token }}</code>
+  <p class="help">
+    Send it as <code>Authorization: Bearer &lt;token&gt;</code>. Do not put it
+    in browser or mobile application code.
+  </p>
+</section>
+{% endif %}
+
+<div class="columns">
+  <section class="section">
+    <h2>Registered applications</h2>
+    {% for integration in integrations %}
+    <article class="integration">
+      <div>
+        <h3>{{ integration.name }}</h3>
+        <p class="muted">
+          Created {{ integration.created_at|date:"M j, Y" }} {% if
+          integration.last_used_at %}
+          <br />Last used {{ integration.last_used_at|date:"M j, Y H:i" }} UTC
+          {% else %} <br />Not used yet {% endif %}
+        </p>
+        <span
+          class="status{% if not integration.is_active %} inactive{% endif %}"
+        >
+          {% if integration.is_active %}Active{% else %}Deactivated{% endif %}
+        </span>
+      </div>
+      {% if integration.is_active %}
+      <form
+        method="post"
+        action="{% url 'integration-deactivate' integration.pk %}"
+        onsubmit="
+          return confirm(
+            'Deactivate this integration? Its token will stop working immediately.',
+          );
+        "
+      >
+        {% csrf_token %}<button class="secondary" type="submit">
+          Deactivate
+        </button>
+      </form>
+      {% endif %}
+    </article>
+    {% empty %}
+    <p class="muted">No applications registered yet.</p>
+    {% endfor %}
+  </section>
+
+  <section class="section">
+    <h2>Register an application</h2>
+    <p class="muted">
+      Use a distinct integration for each application so credentials can be
+      revoked independently.
+    </p>
+    <form method="post">
+      {% csrf_token %}
+      <label for="id_name">Application name</label>
+      {{ form.name }}{{ form.name.errors }}
+      <button class="form-submit" type="submit">Create integration</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

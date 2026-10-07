@@ -1,0 +1,32 @@
+{% extends "clinicalDecisionAI/base.html" %} {% block title %}Create account |
+Afyora Clinical AI{% endblock %} {% block content %}
+<section class="auth-panel">
+  <p class="muted">APPLICATION ACCESS</p>
+  <h1>Create your account</h1>
+  <p class="intro">
+    Register your account to create and manage application credentials for the
+    Clinical AI API.
+  </p>
+  <form method="post">
+    {% csrf_token %} {% if form.non_field_errors %}
+    <div class="notice error">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <label for="id_username">Username</label>
+    {{ form.username }}{{ form.username.errors }}
+    <label for="id_email">Email <span class="muted">(optional)</span></label>
+    {{ form.email }}{{ form.email.errors }}
+    <label for="id_password1">Password</label>
+    {{ form.password1 }}{{ form.password1.errors }}
+    <p class="help">
+      Use a unique password. Password requirements are checked when the account
+      is created.
+    </p>
+    <label for="id_password2">Confirm password</label>
+    {{ form.password2 }}{{ form.password2.errors }}
+    <button class="form-submit" type="submit">Create account</button>
+  </form>
+  <p class="muted">
+    Already registered? <a href="{% url 'account-login' %}">Sign in</a>.
+  </p>
+</section>
+{% endblock %}

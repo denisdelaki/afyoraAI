@@ -1,0 +1,276 @@
+{% extends "clinicalDecisionAI/base.html" %} {% block title %}API integration
+guide | Afyora Clinical AI{% endblock %} {% block content %}
+<p class="muted">DEVELOPER CONSOLE / INTEGRATION GUIDE</p>
+<h1>Connect your application</h1>
+<p class="intro">
+  Send a server-side JSON request to Afyora and read the clinical
+  decision-support result from the response. Choose your language to see a
+  ready-to-adapt example.
+</p>
+
+<div class="guide-note">
+  <strong>Before you start:</strong> register an integration and store its
+  bearer token as <code>CLINICAL_AI_TOKEN</code> in your backend secret manager.
+  These examples send requests from a trusted backend, not from browser or
+  mobile code.
+</div>
+
+<div class="language-tabs" role="tablist" aria-label="Programming language">
+  <button
+    id="tab-python"
+    type="button"
+    role="tab"
+    aria-selected="true"
+    aria-controls="panel-python"
+    tabindex="0"
+  >
+    Python
+  </button>
+  <button
+    id="tab-node"
+    type="button"
+    role="tab"
+    aria-selected="false"
+    aria-controls="panel-node"
+    tabindex="-1"
+  >
+    Node.js
+  </button>
+  <button
+    id="tab-java"
+    type="button"
+    role="tab"
+    aria-selected="false"
+    aria-controls="panel-java"
+    tabindex="-1"
+  >
+    Java
+  </button>
+  <button
+    id="tab-go"
+    type="button"
+    role="tab"
+    aria-selected="false"
+    aria-controls="panel-go"
+    tabindex="-1"
+  >
+    Go
+  </button>
+</div>
+
+<section
+  id="panel-python"
+  class="code-panel"
+  role="tabpanel"
+  aria-labelledby="tab-python"
+>
+  <div class="code-toolbar">
+    <h2>Python</h2>
+    <button type="button" data-copy="code-python">Copy code</button>
+  </div>
+  <p class="muted">
+    Requires Python 3 and <code>requests</code>. Set
+    <code>CLINICAL_AI_BASE_URL</code> for your deployment.
+  </p>
+  <pre><code id="code-python">import os
+import requests
+
+base_url = os.getenv("CLINICAL_AI_BASE_URL", "http://127.0.0.1:8001")
+token = os.environ["CLINICAL_AI_TOKEN"]
+response = requests.post(
+    f"{base_url}/api/clinical-ai/analyze/",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"symptoms": ["fever"], "vitals": {"temperature": 38.5}},
+    timeout=45,
+)
+response.raise_for_status()
+analysis = response.json()
+print(analysis["clinical_summary"])</code></pre>
+</section>
+
+<section
+  id="panel-node"
+  class="code-panel"
+  role="tabpanel"
+  aria-labelledby="tab-node"
+  hidden
+>
+  <div class="code-toolbar">
+    <h2>Node.js</h2>
+    <button type="button" data-copy="code-node">Copy code</button>
+  </div>
+  <p class="muted">
+    Requires Node.js 18 or later. Use built-in <code>fetch</code> from a server
+    process.
+  </p>
+  <pre><code id="code-node">const baseUrl = process.env.CLINICAL_AI_BASE_URL ?? "http://127.0.0.1:8001";
+const token = process.env.CLINICAL_AI_TOKEN;
+if (!token) throw new Error("CLINICAL_AI_TOKEN is not configured");
+
+const response = await fetch(`${baseUrl}/api/clinical-ai/analyze/`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    symptoms: ["fever"],
+    vitals: { temperature: 38.5 },
+  }),
+  signal: AbortSignal.timeout(45_000),
+});
+const result = await response.json();
+if (!response.ok) throw new Error(`API ${response.status}: ${JSON.stringify(result)}`);
+console.log(result.clinical_summary);</code></pre>
+</section>
+
+<section
+  id="panel-java"
+  class="code-panel"
+  role="tabpanel"
+  aria-labelledby="tab-java"
+  hidden
+>
+  <div class="code-toolbar">
+    <h2>Java</h2>
+    <button type="button" data-copy="code-java">Copy code</button>
+  </div>
+  <p class="muted">
+    Requires Java 17 or later and uses the built-in <code>HttpClient</code>.
+  </p>
+  <pre><code id="code-java">import java.net.URI;
+import java.net.http.*;
+import java.time.Duration;
+
+public class ClinicalAiExample {
+    public static void main(String[] args) throws Exception {
+        String baseUrl = System.getenv().getOrDefault(
+            "CLINICAL_AI_BASE_URL", "http://127.0.0.1:8001");
+        String token = System.getenv("CLINICAL_AI_TOKEN");
+        if (token == null || token.isBlank()) {
+            throw new IllegalStateException("CLINICAL_AI_TOKEN is not configured");
+        }
+        String payload = """
+            {"symptoms":["fever"],"vitals":{"temperature":38.5}}
+            """;
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(baseUrl + "/api/clinical-ai/analyze/"))
+            .timeout(Duration.ofSeconds(45))
+            .header("Authorization", "Bearer " + token)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(payload))
+            .build();
+        HttpResponse&lt;String&gt; response = HttpClient.newHttpClient().send(
+            request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() &lt; 200 || response.statusCode() &gt;= 300) {
+            throw new IllegalStateException("API " + response.statusCode() + ": " + response.body());
+        }
+        System.out.println(response.body());
+    }
+}</code></pre>
+</section>
+
+<section
+  id="panel-go"
+  class="code-panel"
+  role="tabpanel"
+  aria-labelledby="tab-go"
+  hidden
+>
+  <div class="code-toolbar">
+    <h2>Go</h2>
+    <button type="button" data-copy="code-go">Copy code</button>
+  </div>
+  <p class="muted">Uses Go's standard library.</p>
+  <pre><code id="code-go">package main
+
+import (
+    "bytes"
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+    "time"
+)
+
+func main() {
+    baseURL := os.Getenv("CLINICAL_AI_BASE_URL")
+    if baseURL == "" { baseURL = "http://127.0.0.1:8001" }
+    token := os.Getenv("CLINICAL_AI_TOKEN")
+    if token == "" { panic("CLINICAL_AI_TOKEN is not configured") }
+
+    payload := []byte(`{"symptoms":["fever"],"vitals":{"temperature":38.5}}`)
+    request, err := http.NewRequest(http.MethodPost,
+        baseURL+"/api/clinical-ai/analyze/", bytes.NewReader(payload))
+    if err != nil { panic(err) }
+    request.Header.Set("Authorization", "Bearer "+token)
+    request.Header.Set("Content-Type", "application/json")
+
+    client := &amp;http.Client{Timeout: 45 * time.Second}
+    response, err := client.Do(request)
+    if err != nil { panic(err) }
+    defer response.Body.Close()
+    body, err := io.ReadAll(response.Body)
+    if err != nil { panic(err) }
+    if response.StatusCode &lt; 200 || response.StatusCode &gt;= 300 {
+        panic(fmt.Sprintf("API %d: %s", response.StatusCode, body))
+    }
+    fmt.Println(string(body))
+}</code></pre>
+</section>
+
+<p id="copy-status" class="muted" aria-live="polite"></p>
+<div class="guide-note">
+  The API returns a validated JSON response. Handle non-2xx status codes, keep
+  patient data and credentials on trusted servers, and require qualified
+  clinician review of every result.
+</div>
+<p><a href="{% url 'integration-dashboard' %}">Back to integrations</a></p>
+
+<script>
+  const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+  const panels = tabs.map((tab) =>
+    document.getElementById(tab.getAttribute("aria-controls")),
+  );
+
+  function selectTab(selectedIndex, focus = false) {
+    tabs.forEach((tab, index) => {
+      const selected = index === selectedIndex;
+      tab.setAttribute("aria-selected", String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      panels[index].hidden = !selected;
+    });
+    if (focus) tabs[selectedIndex].focus();
+  }
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => selectTab(index));
+    tab.addEventListener("keydown", (event) => {
+      let nextIndex = index;
+      if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+      if (event.key === "ArrowLeft")
+        nextIndex = (index - 1 + tabs.length) % tabs.length;
+      if (event.key === "Home") nextIndex = 0;
+      if (event.key === "End") nextIndex = tabs.length - 1;
+      if (nextIndex !== index) {
+        event.preventDefault();
+        selectTab(nextIndex, true);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-copy]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const code = document.getElementById(button.dataset.copy).textContent;
+      const status = document.getElementById("copy-status");
+      try {
+        await navigator.clipboard.writeText(code);
+        status.textContent = "Code copied.";
+      } catch {
+        status.textContent =
+          "Copy unavailable. Select the code block to copy it manually.";
+      }
+    });
+  });
+</script>
+{% endblock %}

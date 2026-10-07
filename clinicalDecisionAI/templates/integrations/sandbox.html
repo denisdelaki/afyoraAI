@@ -1,0 +1,180 @@
+{% extends "clinicalDecisionAI/base.html" %} {% block title %}AI sandbox |
+Afyora Clinical AI{% endblock %} {% block content %}
+<p class="muted">DEVELOPER CONSOLE / SANDBOX</p>
+<h1>Test a clinical analysis</h1>
+<p class="intro">
+  Try the same prompt, Groq provider, and response validation used by the API
+  before connecting your application.
+</p>
+
+<div class="sandbox-warning">
+  <strong>Use synthetic or properly de-identified data only.</strong>
+  Submitting this form sends the entered clinical information to the configured
+  AI provider and may use API quota. Sandbox results are not clinical advice;
+  qualified clinician review is required. Requests and results are not saved by
+  this application.
+</div>
+
+{% if error %}
+<div class="notice error" role="alert">
+  <strong>{{ error }}</strong>
+  {% if error_details %}
+  <ul>
+    {% for detail in error_details %}
+    <li>{{ detail }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <p class="muted">Request ID: <code>{{ request_id }}</code></p>
+</div>
+{% endif %}
+
+<div class="sandbox-layout">
+  <section class="section">
+    <h2>Sample patient data</h2>
+    <p class="muted">
+      Edit the JSON payload, then run an analysis. The input follows the same
+      schema as the API request.
+    </p>
+    <form method="post">
+      {% csrf_token %}
+      <label for="patient_json">Clinical input (JSON)</label>
+      <textarea
+        id="patient_json"
+        name="patient_json"
+        spellcheck="false"
+        required
+      >
+{{ patient_json }}</textarea
+      >
+      <button class="form-submit" type="submit">Run sandbox analysis</button>
+    </form>
+  </section>
+
+  <section class="section" aria-live="polite">
+    <h2>Analysis result</h2>
+    {% if selected_model %}
+    <p class="muted">Selected Groq model: <code>{{ selected_model }}</code></p>
+    {% endif %} {% if result %}
+    <div class="notice">
+      <strong>AI Clinical Decision Support</strong>
+      <p>
+        For testing only. A qualified healthcare professional must review the
+        result before any clinical decision.
+      </p>
+    </div>
+    <div class="result-heading">
+      <h3>Clinical summary</h3>
+      <span class="risk {{ result.risk_level }}"
+        >{{ result.risk_level }} risk</span
+      >
+    </div>
+    <p>{{ result.clinical_summary }}</p>
+
+    <section class="result-block">
+      <h3>Possible conditions</h3>
+      {% for condition in result.possible_conditions %}
+      <div class="result-condition">
+        <strong>{{ condition.condition }}</strong>
+        <span class="muted">{{ condition.likelihood }}</span>
+        {% if condition.supporting_evidence %}
+        <ul class="result-list">
+          {% for evidence in condition.supporting_evidence %}
+          <li>{{ evidence }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% empty %}
+      <p class="muted">No possible conditions were returned.</p>
+      {% endfor %}
+    </section>
+
+    <section class="result-block">
+      <h3>Abnormal findings</h3>
+      {% if result.abnormal_findings %}
+      <ul class="result-list">
+        {% for item in result.abnormal_findings %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">None reported in this response.</p>
+      {% endif %}
+    </section>
+    <section class="result-block">
+      <h3>Recommended investigations</h3>
+      {% if result.recommended_investigations %}
+      <ul class="result-list">
+        {% for item in result.recommended_investigations %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">None suggested.</p>
+      {% endif %}
+    </section>
+    <section class="result-block">
+      <h3>Management considerations</h3>
+      {% if result.management_considerations %}
+      <ul class="result-list">
+        {% for item in result.management_considerations %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">None returned.</p>
+      {% endif %}
+    </section>
+    <section class="result-block">
+      <h3>Medication considerations</h3>
+      {% if result.medication_considerations %}
+      <ul class="result-list">
+        {% for item in result.medication_considerations %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">None returned.</p>
+      {% endif %}
+    </section>
+    <section class="result-block">
+      <h3>Red flags</h3>
+      {% if result.red_flags %}
+      <ul class="result-list">
+        {% for item in result.red_flags %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">None returned.</p>
+      {% endif %}
+    </section>
+    <section class="result-block">
+      <h3>Referral recommendation</h3>
+      {% if result.referral_recommendation.required %}
+      <p>
+        {{ result.referral_recommendation.urgency|title }} referral recommended
+      </p>
+      {% else %}
+      <p>
+        No referral indicated from the supplied information. Urgency: {{
+        result.referral_recommendation.urgency }}.
+      </p>
+      {% endif %} {% if result.referral_recommendation.reason %}
+      <p>{{ result.referral_recommendation.reason }}</p>
+      {% endif %}
+    </section>
+    <section class="result-block">
+      <h3>Confidence and review</h3>
+      <p>Confidence: {{ result.confidence|floatformat:2 }} / 1.00</p>
+      <p><strong>Human clinician review required: Yes</strong></p>
+    </section>
+    {% else %}
+    <p class="muted">
+      Your validated result will appear here after you run a test.
+    </p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
