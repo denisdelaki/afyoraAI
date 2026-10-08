@@ -1,6 +1,10 @@
 import hashlib
 
 from django.utils import timezone
+from django.contrib.auth.models import AnonymousUser
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import BasePermission
 
 from clinicalDecisionAI.models import IntegrationApplication
 
@@ -28,3 +32,19 @@ def authenticate_integration_request(request) -> IntegrationApplication | None:
             last_used_at=timezone.now()
         )
     return application
+
+
+class IntegrationTokenAuthentication(BaseAuthentication):
+    def authenticate(self, request):
+        application = authenticate_integration_request(request)
+        if application is None:
+            raise AuthenticationFailed('A registered application bearer token is required.')
+        return AnonymousUser(), application
+
+    def authenticate_header(self, request):
+        return 'Bearer'
+
+
+class IntegrationApplicationPermission(BasePermission):
+    def has_permission(self, request, view):
+        return isinstance(request.auth, IntegrationApplication) and request.auth.is_active

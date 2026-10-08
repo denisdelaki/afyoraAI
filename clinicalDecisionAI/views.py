@@ -1,36 +1,86 @@
+import asyncio
 import json
 import logging
 import secrets
 import time
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.core.exceptions import RequestDataTooBig
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
+from fastmcp import Client as MCPClient, FastMCP
+from fastmcp.exceptions import ToolError
 from pydantic import ValidationError
+from rest_framework import exceptions, status
+from rest_framework.parsers import JSONParser
+from rest_framework.renderers import JSONRenderer
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from clinicalDecisionAI.authentication import (
-	authenticate_integration_request,
+	IntegrationApplicationPermission,
+	IntegrationTokenAuthentication,
 	hash_integration_token,
 )
 from clinicalDecisionAI.forms import AccountCreationForm, IntegrationRegistrationForm
 from clinicalDecisionAI.models import IntegrationApplication
-from clinicalDecisionAI.schemas import ClinicalAnalysisRequest
+from clinicalDecisionAI.schemas import ClinicalAnalysisRequest, ClinicalAnalysisResponse
 from clinicalDecisionAI.services import (
 	ClinicalResponseError,
 	GroqConfigurationError,
 	GroqProviderError,
 	run_clinical_analysis,
 	select_groq_model,
+	assess_vital_triage,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _request_id(request):
+	try:
+		return str(UUID(request.headers.get('X-Request-ID', '')))
+	except (ValueError, AttributeError):
+		return str(uuid4())
+
+
+async def prepare_clinical_context(patient: ClinicalAnalysisRequest) -> dict:
+	return patient.model_dump(mode='json', by_alias=True, exclude={'patient_id'}, exclude_none=True)
+
+
+def _create_clinical_mcp():
+	server = FastMCP('ClinicalContext', mask_error_details=True)
+	server.tool(prepare_clinical_context)
+	return server
+
+
+async def _local_context(patient):
+	async with asyncio.timeout(settings.CLINICAL_MCP_TIMEOUT_SECONDS):
+		async with MCPClient(_create_clinical_mcp()) as client:
+			result = await client.call_tool(
+				'prepare_clinical_context',
+				{'patient': patient.model_dump(mode='json', by_alias=True, exclude={'patient_id'})},
+				timeout=settings.CLINICAL_MCP_TIMEOUT_SECONDS,
+			)
+			return ClinicalAnalysisRequest.model_validate(result.data)
+
+
+def _analyze_patient(patient, model):
+	try:
+		context = asyncio.run(_local_context(patient))
+	except TimeoutError as exc:
+		raise ClinicalResponseError('tool_timeout') from exc
+	except (ToolError, ValidationError) as exc:
+		raise ClinicalResponseError('tool_error') from exc
+	decision = run_clinical_analysis(context, model=model)
+	return ClinicalAnalysisResponse(
+		**decision.model_dump(mode='json'), triage=assess_vital_triage(patient),
+	)
 
 
 def application_home(request):
@@ -97,22 +147,25 @@ def clinical_sandbox(request):
 		'allergies': [],
 		'current_medications': [],
 		'vitals': {'temperature': 38.5, 'heart_rate': 104},
-		'laboratory_results': [],
-		'radiology_results': [],
+		'labs': [],
+		'radiology': [],
 		'previous_diagnoses': [],
 		'observations': [],
 	}
 	patient_json = json.dumps(demo_request, indent=2)
 	result = None
+	triage = None
 	selected_model = None
 	error = None
 	error_details = []
 	status = 200
-	request_id = request.headers.get('X-Request-ID') or str(uuid4())
+	request_id = _request_id(request)
 
 	if request.method == 'POST':
 		patient_json = request.POST.get('patient_json', '')
 		try:
+			if len(patient_json.encode('utf-8')) > settings.CLINICAL_MAX_REQUEST_BYTES:
+				raise ValueError('Clinical input exceeds the request size limit.')
 			patient = ClinicalAnalysisRequest.model_validate_json(patient_json)
 		except ValidationError as exc:
 			error = 'Check the JSON input and correct the highlighted validation issues.'
@@ -129,12 +182,16 @@ def clinical_sandbox(request):
 					'error_category': 'request_validation',
 				},
 			)
+		except (ValueError, RecursionError):
+			error = 'Clinical input is too large or too deeply nested.'
+			status = 400
 		else:
+			triage = assess_vital_triage(patient)
 			started = time.monotonic()
 			request_timestamp = datetime.now(timezone.utc).isoformat()
 			selected_model = select_groq_model()
 			try:
-				result = run_clinical_analysis(patient, model=selected_model)
+				result = _analyze_patient(patient, model=selected_model)
 			except GroqConfigurationError:
 				error = 'The AI provider is not configured. Contact the service administrator.'
 				status, category = 503, 'missing_configuration'
@@ -159,8 +216,8 @@ def clinical_sandbox(request):
 						error += ' Check that the configured model is available.'
 					elif exc.status_code >= 500:
 						error += ' The provider may be temporarily unavailable.'
-			except ClinicalResponseError as exc:
-				category = exc.category
+			except (ClinicalResponseError, ValidationError) as exc:
+				category = getattr(exc, 'category', 'schema_validation')
 				status = 502
 				error = 'The AI response could not be validated. No result was returned.'
 			except Exception:
@@ -201,6 +258,7 @@ def clinical_sandbox(request):
 		{
 			'patient_json': patient_json,
 			'result': result,
+			'triage': triage,
 			'error': error,
 			'error_details': error_details,
 			'request_id': request_id,
@@ -227,142 +285,118 @@ def deactivate_integration(request, integration_id):
 	return redirect('integration-dashboard')
 
 
-def _error_response(code: str, message: str, status: int) -> JsonResponse:
-	return JsonResponse({'error': {'code': code, 'message': message}}, status=status)
-
-
 def _validation_details(error: ValidationError) -> list[dict[str, str]]:
 	return [
 		{
 			'field': '.'.join(str(part) for part in item['loc']),
 			'message': item['msg'],
 		}
-		for item in error.errors(include_input=False)
+		for item in error.errors(include_input=False, include_context=False, include_url=False)
 	]
 
 
-@csrf_exempt
-@require_http_methods(['GET', 'POST'])
-def analyze_clinical_case(request):
-	request_id = request.headers.get('X-Request-ID') or str(uuid4())
-	if request.method == 'GET':
-		response = _error_response(
-			'method_not_allowed',
-			'This API accepts POST requests. Send JSON with a registered application bearer token.',
-			405,
-		)
-		response['Allow'] = 'POST'
-		response['X-Request-ID'] = request_id
+class ClinicalAnalysisAPIView(APIView):
+	authentication_classes = [IntegrationTokenAuthentication]
+	permission_classes = [IntegrationApplicationPermission]
+	parser_classes = [JSONParser]
+	renderer_classes = [JSONRenderer]
+	http_method_names = ['post']
+
+	def initial(self, request, *args, **kwargs):
+		self.request_id = _request_id(request)
+		if request.method != 'POST':
+			raise exceptions.MethodNotAllowed(request.method)
+		super().initial(request, *args, **kwargs)
+
+	def finalize_response(self, request, response, *args, **kwargs):
+		response = super().finalize_response(request, response, *args, **kwargs)
+		response['X-Request-ID'] = self.request_id
+		response['Cache-Control'] = 'no-store'
+		if response.status_code >= 500 and hasattr(self, 'triage'):
+			response.data['triage'] = self.triage.model_dump(mode='json')
+		if hasattr(self, 'selected_model'):
+			response['X-Groq-Model'] = self.selected_model
+		if response.status_code == 200:
+			response['X-Clinical-Review-Required'] = 'true'
 		return response
 
-	application = authenticate_integration_request(request)
-	if application is None:
-		response = _error_response(
-			'authentication_required', 'A registered application bearer token is required.', 401
-		)
-		response['WWW-Authenticate'] = 'Bearer'
-		response['X-Request-ID'] = request_id
-		return response
+	def handle_exception(self, exc):
+		if isinstance(exc, exceptions.APIException):
+			response = super().handle_exception(exc)
+			code, message = {
+				401: ('authentication_required', 'A registered application bearer token is required.'),
+				403: ('permission_denied', 'Application access is not permitted.'),
+				405: ('method_not_allowed', 'This API accepts POST requests with a registered application bearer token.'),
+				406: ('not_acceptable', 'This API returns application/json.'),
+				415: ('invalid_content_type', 'Content-Type must be application/json.'),
+			}.get(response.status_code, ('invalid_request', 'Request body must be a valid JSON object.'))
+			response.data = {'error': {'code': code, 'message': message}}
+			return response
+		if isinstance(exc, RequestDataTooBig):
+			return self.error('request_too_large', 'Request body exceeds the size limit.', 413)
+		if isinstance(exc, RecursionError):
+			return self.error('invalid_request', 'Request body is too deeply nested.', 400)
+		logger.error('Clinical AI application error', extra={'request_id': self.request_id, 'error_category': 'internal_error'})
+		return self.error('internal_error', 'Clinical AI analysis could not be completed.', 500)
 
-	if request.content_type != 'application/json':
-		response = _error_response(
-			'invalid_content_type', 'Content-Type must be application/json.', 415
-		)
-		response['X-Request-ID'] = request_id
-		return response
+	@staticmethod
+	def error(code, message, http_status):
+		return Response({'error': {'code': code, 'message': message}}, status=http_status)
 
-	try:
-		body = json.loads(request.body)
-		if not isinstance(body, dict):
-			raise ValueError
-		patient = ClinicalAnalysisRequest.model_validate(body)
-	except ValidationError as exc:
-		response = JsonResponse(
-			{
-				'error': {
-					'code': 'invalid_request',
-					'message': 'Patient information did not match the expected schema.',
-					'details': _validation_details(exc),
-				}
-			},
-			status=400,
-		)
-		response['X-Request-ID'] = request_id
-		return response
-	except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-		response = _error_response(
-			'invalid_request', 'Request body must be a valid JSON object.', 400
-		)
-		response['X-Request-ID'] = request_id
-		return response
+	def post(self, request):
+		if request.content_type.split(';', 1)[0].strip().lower() != 'application/json':
+			raise exceptions.UnsupportedMediaType(request.content_type)
+		if len(request.body) > settings.CLINICAL_MAX_REQUEST_BYTES:
+			raise RequestDataTooBig
+		try:
+			patient = ClinicalAnalysisRequest.model_validate(request.data)
+		except ValidationError as exc:
+			return Response({'error': {
+				'code': 'invalid_request',
+				'message': 'Patient information did not match the expected schema.',
+				'details': _validation_details(exc),
+			}}, status=status.HTTP_400_BAD_REQUEST)
 
-	started = time.monotonic()
-	request_timestamp = datetime.now(timezone.utc).isoformat()
-	selected_model = select_groq_model()
-	try:
-		result = run_clinical_analysis(patient, model=selected_model)
-	except GroqConfigurationError:
-		status, code, message, category = (
-			503,
-			'ai_provider_unavailable',
-			'Clinical AI is not configured.',
-			'missing_configuration',
-		)
-	except GroqProviderError as exc:
-		category = exc.category
-		status, code, message = {
-			'authentication': (502, 'ai_provider_error', 'Clinical AI provider authentication failed.'),
-			'rate_limit': (429, 'ai_rate_limited', 'Clinical AI is temporarily rate limited.'),
-			'timeout': (504, 'ai_timeout', 'Clinical AI did not respond in time.'),
-			'network': (502, 'ai_provider_unavailable', 'Clinical AI provider is unavailable.'),
-			'provider': (502, 'ai_provider_error', 'Clinical AI provider request failed.'),
-		}.get(category, (502, 'ai_provider_error', 'Clinical AI provider request failed.'))
-	except ClinicalResponseError as exc:
-		category = exc.category
-		status, code, message = (
-			502,
-			'ai_invalid_response',
-			'Clinical AI returned a response that could not be validated.',
-		)
-	except Exception:
-		category = 'internal_error'
-		status, code, message = (
-			502,
-			'ai_analysis_failed',
-			'Clinical AI analysis could not be completed.',
-		)
-	else:
-		logger.info(
-			'Clinical AI request completed',
+		started = time.monotonic()
+		triage = assess_vital_triage(patient)
+		self.triage = triage
+		request_timestamp = datetime.now(timezone.utc).isoformat()
+		self.selected_model = select_groq_model()
+		category = None
+		try:
+			result = _analyze_patient(patient, model=self.selected_model)
+			result = ClinicalAnalysisResponse(**result.model_dump(mode='json'))
+		except GroqConfigurationError:
+			category = 'missing_configuration'
+			response = self.error('ai_provider_unavailable', 'Clinical AI is not configured.', 503)
+		except GroqProviderError as exc:
+			category = exc.category
+			http_status, code, message = {
+				'authentication': (502, 'ai_provider_error', 'Clinical AI provider authentication failed.'),
+				'rate_limit': (429, 'ai_rate_limited', 'Clinical AI is temporarily rate limited.'),
+				'timeout': (504, 'ai_timeout', 'Clinical AI did not respond in time.'),
+				'network': (502, 'ai_provider_unavailable', 'Clinical AI provider is unavailable.'),
+			}.get(category, (502, 'ai_provider_error', 'Clinical AI provider request failed.'))
+			response = self.error(code, message, http_status)
+		except (ClinicalResponseError, ValidationError) as exc:
+			category = getattr(exc, 'category', 'schema_validation')
+			response = self.error('ai_invalid_response', 'Clinical AI returned a response that could not be validated.', 502)
+		else:
+			response = Response(result.model_dump(mode='json'))
+		if category:
+			response.data['triage'] = triage.model_dump(mode='json')
+		logger.log(
+			logging.WARNING if category else logging.INFO,
+			'Clinical AI request failed' if category else 'Clinical AI request completed',
 			extra={
-				'request_id': request_id,
-				'integration_application_id': application.pk,
-				'model': selected_model,
+				'request_id': self.request_id,
+				'integration_application_id': request.auth.pk,
+				'model': self.selected_model,
 				'request_timestamp': request_timestamp,
 				'response_timestamp': datetime.now(timezone.utc).isoformat(),
 				'latency_ms': round((time.monotonic() - started) * 1000),
-				'success': True,
+				'success': category is None,
+				'error_category': category,
 			},
 		)
-		response = JsonResponse(result.model_dump(mode='json'))
-		response['X-Request-ID'] = request_id
-		response['X-Groq-Model'] = selected_model
 		return response
-
-	logger.warning(
-		'Clinical AI request failed',
-		extra={
-			'request_id': request_id,
-			'integration_application_id': application.pk,
-			'model': selected_model,
-			'request_timestamp': request_timestamp,
-			'response_timestamp': datetime.now(timezone.utc).isoformat(),
-			'latency_ms': round((time.monotonic() - started) * 1000),
-			'success': False,
-			'error_category': category,
-		},
-	)
-	response = _error_response(code, message, status)
-	response['X-Request-ID'] = request_id
-	response['X-Groq-Model'] = selected_model
-	return response

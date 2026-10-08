@@ -27,6 +27,31 @@ Afyora Clinical AI{% endblock %} {% block content %}
   {% endif %}
   <p class="muted">Request ID: <code>{{ request_id }}</code></p>
 </div>
+{% endif %} {% if triage %}
+<section
+  class="notice{% if triage.urgent_care_recommended %} error{% endif %}"
+  role="status"
+  aria-live="polite"
+>
+  <h2>Vital-sign triage</h2>
+  {% if triage.urgent_care_recommended %}
+  <strong>Urgent clinical assessment recommended now</strong>
+  {% elif triage.level == 'not_assessed' %}
+  <strong>Triage could not be fully assessed</strong>
+  {% else %}
+  <strong>No configured threshold triggered</strong>
+  {% endif %}
+  <p>{{ triage.recommendation }}</p>
+  {% if triage.reasons %}
+  <ul>
+    {% for reason in triage.reasons %}
+    <li>{{ reason }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %} {% if triage.unassessed_vitals %}
+  <p>Unassessed measurements: {{ triage.unassessed_vitals|join:", " }}</p>
+  {% endif %}
+</section>
 {% endif %}
 
 <div class="sandbox-layout">
@@ -64,49 +89,26 @@ Afyora Clinical AI{% endblock %} {% block content %}
       </p>
     </div>
     <div class="result-heading">
-      <h3>Clinical summary</h3>
-      <span class="risk {{ result.risk_level }}"
-        >{{ result.risk_level }} risk</span
-      >
+      <h3>Provisional assessment</h3>
     </div>
-    <p>{{ result.clinical_summary }}</p>
+    <p>{{ result.supported_diagnosis }}</p>
 
     <section class="result-block">
       <h3>Possible conditions</h3>
-      {% for condition in result.possible_conditions %}
-      <div class="result-condition">
-        <strong>{{ condition.condition }}</strong>
-        <span class="muted">{{ condition.likelihood }}</span>
-        {% if condition.supporting_evidence %}
-        <ul class="result-list">
-          {% for evidence in condition.supporting_evidence %}
-          <li>{{ evidence }}</li>
-          {% endfor %}
-        </ul>
-        {% endif %}
-      </div>
-      {% empty %}
-      <p class="muted">No possible conditions were returned.</p>
-      {% endfor %}
+      <ul class="result-list">
+        {% for condition in result.possible_disease %}
+        <li>{{ condition }}</li>
+        {% empty %}
+        <li>No possible conditions were returned.</li>
+        {% endfor %}
+      </ul>
     </section>
 
     <section class="result-block">
-      <h3>Abnormal findings</h3>
-      {% if result.abnormal_findings %}
-      <ul class="result-list">
-        {% for item in result.abnormal_findings %}
-        <li>{{ item }}</li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted">None reported in this response.</p>
-      {% endif %}
-    </section>
-    <section class="result-block">
       <h3>Recommended investigations</h3>
-      {% if result.recommended_investigations %}
+      {% if result.further_labs_to_be_done %}
       <ul class="result-list">
-        {% for item in result.recommended_investigations %}
+        {% for item in result.further_labs_to_be_done %}
         <li>{{ item }}</li>
         {% endfor %}
       </ul>
@@ -115,22 +117,14 @@ Afyora Clinical AI{% endblock %} {% block content %}
       {% endif %}
     </section>
     <section class="result-block">
-      <h3>Management considerations</h3>
-      {% if result.management_considerations %}
-      <ul class="result-list">
-        {% for item in result.management_considerations %}
-        <li>{{ item }}</li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted">None returned.</p>
-      {% endif %}
-    </section>
-    <section class="result-block">
       <h3>Medication considerations</h3>
-      {% if result.medication_considerations %}
+      <p class="muted">
+        Advisory only, not a prescription or authorization to administer
+        medication.
+      </p>
+      {% if result.drugs_admissible %}
       <ul class="result-list">
-        {% for item in result.medication_considerations %}
+        {% for item in result.drugs_admissible %}
         <li>{{ item }}</li>
         {% endfor %}
       </ul>
@@ -139,35 +133,7 @@ Afyora Clinical AI{% endblock %} {% block content %}
       {% endif %}
     </section>
     <section class="result-block">
-      <h3>Red flags</h3>
-      {% if result.red_flags %}
-      <ul class="result-list">
-        {% for item in result.red_flags %}
-        <li>{{ item }}</li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted">None returned.</p>
-      {% endif %}
-    </section>
-    <section class="result-block">
-      <h3>Referral recommendation</h3>
-      {% if result.referral_recommendation.required %}
-      <p>
-        {{ result.referral_recommendation.urgency|title }} referral recommended
-      </p>
-      {% else %}
-      <p>
-        No referral indicated from the supplied information. Urgency: {{
-        result.referral_recommendation.urgency }}.
-      </p>
-      {% endif %} {% if result.referral_recommendation.reason %}
-      <p>{{ result.referral_recommendation.reason }}</p>
-      {% endif %}
-    </section>
-    <section class="result-block">
-      <h3>Confidence and review</h3>
-      <p>Confidence: {{ result.confidence|floatformat:2 }} / 1.00</p>
+      <h3>Clinical review</h3>
       <p><strong>Human clinician review required: Yes</strong></p>
     </section>
     {% else %}

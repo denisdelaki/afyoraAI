@@ -35,12 +35,17 @@ Afyora Clinical AI{% endblock %} {% block content %}
     <article class="integration">
       <div>
         <h3>{{ integration.name }}</h3>
+        {% if integration.last_used_at %}
         <p class="muted">
-          Created {{ integration.created_at|date:"M j, Y" }} {% if
-          integration.last_used_at %}
+          Created {{ integration.created_at|date:"M j, Y" }}
           <br />Last used {{ integration.last_used_at|date:"M j, Y H:i" }} UTC
-          {% else %} <br />Not used yet {% endif %}
         </p>
+        {% else %}
+        <p class="muted">
+          Created {{ integration.created_at|date:"M j, Y" }}
+          <br />Not used yet
+        </p>
+        {% endif %}
         <span
           class="status{% if not integration.is_active %} inactive{% endif %}"
         >

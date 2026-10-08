@@ -1,5 +1,37 @@
 # Afyora Clinical Decision AI
 
+## Deploy to Render
+
+The repository includes a Render Blueprint in `render.yaml` and a `build.sh` build script. Push these files to your Git repository, then in Render choose **New + → Blueprint**, connect the repository, and apply the Blueprint. It creates a Python web service and a persistent PostgreSQL database. The selected smallest persistent web/database plans are paid Render resources; review Render's current pricing before applying.
+
+During Blueprint setup, enter the rotated Groq credential when prompted for `GROQ_API_KEY` and a comma-separated model pool for `GROQ_MODELS` (for example, `openai/gpt-oss-120b,openai/gpt-oss-20b`). Both are managed in the Render service's Environment settings, not hardcoded in the Blueprint. On existing services, verify these values in Render; `sync: false` variables are requested during initial Blueprint creation and are not updated by subsequent Blueprint syncs. The Blueprint generates `DJANGO_SECRET_KEY`; do not add secrets to the repository.
+
+Render-provided environment variables take precedence over local `.env` values. `DATABASE_URL` comes from the provisioned database, `RENDER_EXTERNAL_HOSTNAME` is added to allowed hosts and trusted HTTPS origins, and Render supplies `PORT` for Gunicorn. Optional custom domains can be set with comma-separated `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` variables.
+
+| Environment variable           | Default | Purpose                            |
+| ------------------------------ | ------- | ---------------------------------- |
+| `GROQ_TIMEOUT_SECONDS`         | `30`    | Provider request timeout           |
+| `CLINICAL_MCP_TIMEOUT_SECONDS` | `5`     | Local context preparation deadline |
+| `CLINICAL_MAX_REQUEST_BYTES`   | `65536` | Clinical request body limit        |
+| `WEB_CONCURRENCY`              | `1`     | Gunicorn worker processes          |
+| `GUNICORN_TIMEOUT_SECONDS`     | `90`    | Gunicorn worker timeout            |
+
+Timeouts must be finite positive numbers and the request limit must be a positive integer; invalid Django limits fail at startup. Keep the Gunicorn timeout above the combined Groq and context preparation deadlines, with additional overhead. Increase worker count only within the service's memory budget. Gunicorn variables must be supplied through Render or exported in the launching shell; Django's `.env` loader does not configure its parent shell.
+
+Render build command:
+
+```sh
+bash build.sh
+```
+
+Render start command:
+
+```sh
+python manage.py migrate --noinput && gunicorn afyoraAIAgent.wsgi:application --bind "0.0.0.0:$PORT" --workers "${WEB_CONCURRENCY:-1}" --timeout "${GUNICORN_TIMEOUT_SECONDS:-90}" --access-logfile -
+```
+
+The start command applies outstanding database migrations before launching Gunicorn. After the first deploy, create an administrator from the Render Shell with `python manage.py createsuperuser`. The app's self-service signup currently has no email verification; add identity verification and abuse prevention before opening it to the public.
+
 ## Backend setup
 
 Install the declared dependencies and apply Django migrations:
@@ -47,40 +79,44 @@ Example request:
     "heart_rate": 110,
     "blood_pressure": "150/95"
   },
-  "laboratory_results": [],
-  "radiology_results": [],
+  "labs": [],
+  "radiology": [],
   "previous_diagnoses": [],
   "observations": []
 }
 ```
 
-Successful responses contain `clinical_summary`, `risk_level`, `possible_conditions`, `abnormal_findings`, `recommended_investigations`, `management_considerations`, `medication_considerations`, `red_flags`, `referral_recommendation`, `confidence`, and `requires_human_review`. The response is validated before it is returned; invalid provider output produces a controlled error instead.
+`symptoms` is required and must be a nonempty list of nonblank strings. `labs` and `radiology` also accept the legacy names `laboratory_results` and `radiology_results`, but sending both names for the same field is rejected. Request bodies are limited to 64 KiB; clinical inputs must be de-identified before submission.
+
+Successful responses contain `supported_diagnosis`, `possible_disease`, `drugs_admissible`, `further_labs_to_be_done`, and backend-generated `triage`. This replaces the previous response contract. Strict Pydantic validation runs before a result is returned; invalid provider output produces a controlled error instead.
 
 Example response:
 
 ```json
 {
-  "clinical_summary": "Assessment is limited to the supplied information.",
-  "risk_level": "moderate",
-  "possible_conditions": [],
-  "abnormal_findings": [],
-  "recommended_investigations": [],
-  "management_considerations": [
-    "Review in the context of a clinical assessment."
+  "supported_diagnosis": "Assessment is uncertain; qualified clinician review is required.",
+  "possible_disease": [],
+  "drugs_admissible": [],
+  "further_labs_to_be_done": [
+    "Further investigations depend on clinical assessment."
   ],
-  "medication_considerations": [],
-  "red_flags": [],
-  "referral_recommendation": {
-    "required": false,
-    "urgency": "routine",
-    "reason": "No urgent referral indication was identified from the supplied information."
-  },
-  "confidence": 0.35,
-  "requires_human_review": true
+  "triage": {
+    "level": "not_assessed",
+    "urgent_care_recommended": false,
+    "reasons": [],
+    "unassessed_vitals": ["respiratory_rate", "oxygen_saturation"],
+    "recommendation": "Vital triage is incomplete; obtain missing measurements and seek qualified clinician review.",
+    "requires_human_review": true,
+    "rule_set": "adult-vital-screening-v1"
+  }
 }
 ```
 
-The backend builds the clinical prompt and calls Groq. Patient identifiers are not sent to the model. Requests fail closed when the provider is unavailable or its response does not validate. Every successful analysis requires human review; the output is decision support only and does not prescribe or make treatment decisions.
+The DRF endpoint prepares context through an embedded FastMCP in-memory client in the request thread, then builds the schema-hydrated prompt and calls Groq in native JSON mode. No MCP network listener or subprocess is started. There is no configured RAG source; retrieval must be explicitly implemented against approved, tenant-scoped sources before deployment.
+
+Top-level `patient_id` is excluded and known nested identifying fields are rejected. Free text still requires caller-side de-identification, and clinical information is sent to Groq. Requests fail closed when tools or the provider fail, or output does not validate. Every successful analysis requires qualified clinician review (`X-Clinical-Review-Required: true`). `drugs_admissible` is advisory only, not permission to prescribe or administer medication. API responses use `Cache-Control: no-store`.
+
+Vital-sign triage is computed independently of the AI and survives provider failure. Markedly abnormal adult vitals produce `triage.level: "urgent"` and an urgent-care recommendation. Missing, invalid, conflicting, or incomplete measurements are not treated as normal. Adult screening requires age >=16 and is not applied to known pregnancy (`is_pregnant: true`). Use documented units and obtain clinical approval of the [screening rules and limitations](docs/integration.md#vital-sign-triage) before clinical deployment. This is not a full NEWS2 score or autonomous triage system.
 
 This repository currently contains no Angular application or consultation UI. Other applications should call this Django endpoint from their backend; browser frontends should call their own backend, which can securely hold the integration token. No application should call Groq directly.
 

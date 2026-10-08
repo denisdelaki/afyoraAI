@@ -3,8 +3,12 @@ annotated-types==0.8.0
 anyio==4.15.1
 click==8.5.0
 Django>=5.2.8,<5.3
+djangorestframework==3.16.1
+dj-database-url>=2.3,<4
+fastmcp==2.14.5
 fastapi==0.142.2
 groq==1.7.0
+gunicorn>=23,<24
 h11==0.16.0
 httpcore2==2.13.1
 httpx2==2.13.1
@@ -14,6 +18,7 @@ openai==3.26.0
 opentelemetry-api==1.45.1
 pydantic==2.13.5
 pydantic_core==2.46.5
+psycopg[binary]>=3.2,<4
 python-dotenv==1.2.4
 sniffio==1.3.1
 starlette==1.7.0
@@ -21,3 +26,4 @@ truststore==0.10.4
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 uvicorn==0.54.0
+whitenoise>=6.8,<7

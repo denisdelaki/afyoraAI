@@ -10,27 +10,57 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import math
 import os
 from pathlib import Path
 
+import dj_database_url
 from django.core.management.utils import get_random_secret_key
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / '.env')
+load_dotenv(BASE_DIR / '.env', override=False)
+
+
+def _positive_env(name, default, number_type=float):
+    try:
+        value = number_type(os.getenv(name, str(default)))
+        if value <= 0 or not math.isfinite(value):
+            raise ValueError
+    except (ValueError, OverflowError) as exc:
+        raise ImproperlyConfigured(f'{name} must be a finite positive {number_type.__name__}.') from exc
+    return value
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY') or get_random_secret_key()
+DEBUG = os.getenv('DEBUG', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', '').strip()
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured('DJANGO_SECRET_KEY must be set when DEBUG is false.')
+    SECRET_KEY = get_random_secret_key()
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+    if host.strip()
+]
+render_hostname = os.getenv('RENDER_EXTERNAL_HOSTNAME')
+if render_hostname and render_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(render_hostname)
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
+]
+if render_hostname:
+    CSRF_TRUSTED_ORIGINS.append(f'https://{render_hostname}')
 
 
 # Application definition
@@ -42,11 +72,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
     'clinicalDecisionAI.apps.ClinicaldecisionaiConfig',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -85,6 +117,12 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+if os.getenv('DATABASE_URL'):
+    DATABASES['default'] = dj_database_url.config(
+        conn_max_age=600,
+        conn_health_checks=True,
+        ssl_require=not DEBUG,
+    )
 
 
 # Password validation
@@ -121,7 +159,14 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -138,8 +183,18 @@ _configured_groq_models = [
 ]
 if not _configured_groq_models:
     _configured_groq_models = [
-        os.getenv('GROQ_MODEL', '').strip() or 'openai/gpt-oss-120b'
-    ]
+        model.strip()
+        for model in os.getenv('GROQ_MODEL', '').split(',')
+        if model.strip()
+    ] or ['openai/gpt-oss-120b']
 GROQ_MODELS = tuple(dict.fromkeys(_configured_groq_models))
 GROQ_MODEL = GROQ_MODELS[0]
-GROQ_TIMEOUT_SECONDS = 30.0
+GROQ_TIMEOUT_SECONDS = _positive_env('GROQ_TIMEOUT_SECONDS', 30.0)
+CLINICAL_MCP_TIMEOUT_SECONDS = _positive_env('CLINICAL_MCP_TIMEOUT_SECONDS', 5.0)
+CLINICAL_MAX_REQUEST_BYTES = _positive_env('CLINICAL_MAX_REQUEST_BYTES', 65536, int)
+DATA_UPLOAD_MAX_MEMORY_SIZE = CLINICAL_MAX_REQUEST_BYTES
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG

@@ -20,7 +20,7 @@ from django.urls import path, reverse_lazy
 
 from clinicalDecisionAI.views import (
     account_signup,
-    analyze_clinical_case,
+    ClinicalAnalysisAPIView,
     application_home,
     clinical_sandbox,
     deactivate_integration,
@@ -50,5 +50,5 @@ urlpatterns = [
         deactivate_integration,
         name='integration-deactivate',
     ),
-    path('api/clinical-ai/analyze/', analyze_clinical_case, name='clinical-ai-analyze'),
+    path('api/clinical-ai/analyze/', ClinicalAnalysisAPIView.as_view(), name='clinical-ai-analyze'),
 ]
