@@ -49,6 +49,28 @@ Signed-in users can try a sample request in the `/sandbox/` page. Sandbox submis
 
 Account self-registration is open and email verification is not configured in this starter. Before exposing account creation publicly, add the identity verification, abuse prevention, and account recovery controls appropriate to your deployment.
 
+## Health check API
+
+`GET /api/health/` checks that the application can serve requests and query its default database. No authentication is required; `HEAD` is also supported. Responses use `Cache-Control: no-store`.
+
+```sh
+curl -i http://localhost:8000/api/health/
+```
+
+A healthy application returns HTTP `200`:
+
+```json
+{ "status": "healthy", "checks": { "database": "ok" } }
+```
+
+A database failure returns HTTP `503`:
+
+```json
+{ "status": "unhealthy", "checks": { "database": "unavailable" } }
+```
+
+This endpoint does not call Groq or verify AI-provider availability, credentials, or database migrations. The Render Blueprint uses it as the service health check.
+
 ## Clinical analysis API
 
 For credential setup, complete request/response schemas, error handling, and examples in Python, Node.js, Java, and Go, see the [Application Integration Guide](docs/integration.md).

@@ -24,12 +24,14 @@ from clinicalDecisionAI.views import (
     application_home,
     clinical_sandbox,
     deactivate_integration,
+    health_check,
     integration_guide,
     integration_dashboard,
 )
 
 urlpatterns = [
     path('', application_home, name='home'),
+    path('api/health/', health_check, name='health-check'),
     path('admin/', admin.site.urls),
     path('accounts/signup/', account_signup, name='account-signup'),
     path(

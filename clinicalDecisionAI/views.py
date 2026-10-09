@@ -11,8 +11,10 @@ from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import RequestDataTooBig
+from django.db import connection, DatabaseError
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.http import require_http_methods, require_POST, require_safe
 from fastmcp import Client as MCPClient, FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import ValidationError
@@ -40,6 +42,23 @@ from clinicalDecisionAI.services import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@require_safe
+def health_check(request):
+	try:
+		with connection.cursor() as cursor:
+			cursor.execute('SELECT 1')
+			cursor.fetchone()
+	except DatabaseError:
+		payload = {'status': 'unhealthy', 'checks': {'database': 'unavailable'}}
+		response_status = 503
+	else:
+		payload = {'status': 'healthy', 'checks': {'database': 'ok'}}
+		response_status = 200
+	response = JsonResponse(payload, status=response_status)
+	response['Cache-Control'] = 'no-store'
+	return response
 
 
 def _request_id(request):

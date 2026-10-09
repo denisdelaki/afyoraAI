@@ -6,7 +6,7 @@ services:
     plan: 0.5c-512mb
     buildCommand: bash build.sh
     startCommand: python manage.py migrate --noinput && gunicorn afyoraAIAgent.wsgi:application --bind "0.0.0.0:$PORT" --workers "${WEB_CONCURRENCY:-1}" --timeout "${GUNICORN_TIMEOUT_SECONDS:-90}" --access-logfile -
-    healthCheckPath: /accounts/login/
+    healthCheckPath: /api/health/
     envVars:
       - key: PYTHON_VERSION
         value: 3.14.3

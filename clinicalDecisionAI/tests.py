@@ -13,7 +13,9 @@ from django.core.management import call_command
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.utils import get_random_secret_key
 from django.contrib.auth import get_user_model
+from django.db import OperationalError
 from django.test import Client, SimpleTestCase, TestCase, override_settings
+from django.urls import reverse
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from groq import APITimeoutError
@@ -49,6 +51,36 @@ def provider_response(content):
 	return SimpleNamespace(
 		choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
 	)
+
+
+class HealthCheckTests(TestCase):
+	def test_healthy_database_returns_public_json_response(self):
+		response = self.client.get(reverse('health-check'))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json(), {'status': 'healthy', 'checks': {'database': 'ok'}})
+		self.assertEqual(response['Content-Type'], 'application/json')
+		self.assertEqual(response['Cache-Control'], 'no-store')
+
+	def test_database_failure_returns_503_without_internal_details(self):
+		with patch('clinicalDecisionAI.views.connection.cursor', side_effect=OperationalError('private database details')):
+			response = self.client.get(reverse('health-check'))
+		self.assertEqual(response.status_code, 503)
+		self.assertEqual(response.json(), {'status': 'unhealthy', 'checks': {'database': 'unavailable'}})
+		self.assertEqual(response['Cache-Control'], 'no-store')
+		self.assertNotContains(response, 'private database details', status_code=503)
+
+	def test_head_is_supported(self):
+		response = self.client.head(reverse('health-check'))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.content, b'')
+
+	def test_write_methods_are_rejected_without_querying_database(self):
+		with patch('clinicalDecisionAI.views.connection.cursor') as cursor:
+			for method in ('post', 'put', 'patch', 'delete'):
+				with self.subTest(method=method):
+					response = getattr(self.client, method)(reverse('health-check'))
+					self.assertEqual(response.status_code, 405)
+			cursor.assert_not_called()
 
 
 class DeploymentEnvironmentTests(SimpleTestCase):
