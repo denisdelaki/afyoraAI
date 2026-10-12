@@ -38,6 +38,18 @@ class ClinicalResponseError(Exception):
         super().__init__(category)
 
 
+def _log_rejected_response(model, category, content, issues=None):
+    details = {
+        'model': model,
+        'error_category': category,
+        'issues': issues or [],
+        'output_characters': len(content) if isinstance(content, str) else 0,
+    }
+    if settings.CLINICAL_LOG_INVALID_OUTPUT:
+        details['output'] = content
+    logger.warning('Clinical AI response rejected: %s', json.dumps(details, ensure_ascii=True))
+
+
 def assess_vital_triage(patient: ClinicalAnalysisRequest) -> VitalTriageSchema:
     if patient.age is None or patient.age < 16 or patient.is_pregnant is True:
         return VitalTriageSchema(
@@ -134,6 +146,16 @@ class GroqClient:
         )
 
     def ask(self, prompt: str) -> str:
+        response_format = {'type': 'json_object'}
+        if self.model in ('openai/gpt-oss-120b', 'openai/gpt-oss-20b'):
+            response_format = {
+                'type': 'json_schema',
+                'json_schema': {
+                    'name': 'clinical_decision',
+                    'strict': True,
+                    'schema': ClinicalDecisionSchema.model_json_schema(),
+                },
+            }
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -141,7 +163,7 @@ class GroqClient:
                     {'role': 'system', 'content': SYSTEM_INSTRUCTION},
                     {'role': 'user', 'content': prompt},
                 ],
-                response_format={'type': 'json_object'},
+                response_format=response_format,
             )
         except AuthenticationError as exc:
             raise GroqProviderError('authentication') from exc
@@ -170,8 +192,25 @@ class GroqClient:
         except (AttributeError, IndexError, TypeError):
             content = None
         if not isinstance(content, str) or not content.strip():
+            _log_rejected_response(self.model, 'empty_response', content)
             raise ClinicalResponseError('empty_response')
         return content
+
+
+def _normalize_clinical_output(output: dict) -> dict:
+    normalized = {}
+    for key, value in output.items():
+        candidate = re.sub(r'[\s-]+', '_', key.strip()).lower()
+        field = candidate if candidate in ClinicalDecisionSchema.model_fields else key
+        if field in normalized:
+            raise ValueError('Conflicting output fields map to the same expected field.')
+        if field == 'supported_diagnosis':
+            if isinstance(value, list) and len(value) == 1 and isinstance(value[0], str):
+                value = value[0]
+        elif field in ClinicalDecisionSchema.model_fields and isinstance(value, str):
+            value = [value]
+        normalized[field] = value
+    return normalized
 
 
 def run_clinical_analysis(
@@ -180,15 +219,47 @@ def run_clinical_analysis(
 ) -> ClinicalDecisionSchema:
     client = GroqClient(model=model)
     content = client.ask(build_clinical_prompt(patient))
+    json_content = content.strip()
+    fenced = re.fullmatch(r'```(?:json)?[ \t]*\r?\n(.*?)\r?\n```', json_content, re.DOTALL | re.IGNORECASE)
+    if fenced:
+        json_content = fenced.group(1)
     try:
-        output = json.loads(content)
-    except (json.JSONDecodeError, RecursionError) as exc:
+        output = json.loads(json_content)
+    except json.JSONDecodeError as exc:
+        _log_rejected_response(client.model, 'invalid_json', content, [
+            {'message': exc.msg, 'line': exc.lineno, 'column': exc.colno},
+        ])
+        raise ClinicalResponseError('invalid_json') from exc
+    except RecursionError as exc:
+        _log_rejected_response(client.model, 'invalid_json', content, [
+            {'message': 'JSON exceeds the parser nesting limit.'},
+        ])
         raise ClinicalResponseError('invalid_json') from exc
     if not isinstance(output, dict):
+        _log_rejected_response(client.model, 'schema_validation', content, [
+            {'message': 'Expected a JSON object.', 'received_type': type(output).__name__},
+        ])
         raise ClinicalResponseError('schema_validation')
+    try:
+        output = _normalize_clinical_output(output)
+    except ValueError as exc:
+        _log_rejected_response(client.model, 'schema_validation', content, [
+            {'message': str(exc)},
+        ])
+        raise ClinicalResponseError('schema_validation') from exc
     try:
         return ClinicalDecisionSchema(**output)
     except ValidationError as exc:
         category = 'schema_validation'
-        logger.warning('Clinical AI response rejected: %s', category)
+        issues = [
+            {
+                'field': item['loc'][0] if item['loc'] and item['loc'][0] in ClinicalDecisionSchema.model_fields else 'response',
+                'type': item['type'],
+                'message': item['msg'],
+            }
+            for item in exc.errors(include_input=False, include_context=False, include_url=False)
+        ]
+        if settings.CLINICAL_LOG_INVALID_OUTPUT:
+            issues = exc.errors(include_input=True, include_context=False, include_url=False)
+        _log_rejected_response(client.model, category, content, issues)
         raise ClinicalResponseError(category) from exc

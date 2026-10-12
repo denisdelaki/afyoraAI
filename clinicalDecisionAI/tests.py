@@ -352,6 +352,34 @@ class GroqServiceTests(TestCase):
 
 	@override_settings(GROQ_API_KEY=MOCK_API_KEY)
 	@patch('clinicalDecisionAI.services.Groq')
+	def test_gpt_oss_requests_enforce_the_response_schema(self, groq_factory):
+		groq = groq_factory.return_value
+		groq.chat.completions.create.return_value = provider_response(json.dumps(VALID_RESPONSE))
+		for model in ('openai/gpt-oss-120b', 'openai/gpt-oss-20b'):
+			with self.subTest(model=model):
+				GroqClient(model=model).ask('prompt')
+				response_format = groq.chat.completions.create.call_args.kwargs['response_format']
+				self.assertEqual(response_format['type'], 'json_schema')
+				self.assertTrue(response_format['json_schema']['strict'])
+				self.assertEqual(
+					response_format['json_schema']['schema'],
+					ClinicalDecisionSchema.model_json_schema(),
+				)
+				self.assertEqual(response_format['json_schema']['name'], 'clinical_decision')
+
+	@override_settings(GROQ_API_KEY=MOCK_API_KEY)
+	@patch('clinicalDecisionAI.services.Groq')
+	def test_other_models_keep_json_object_mode(self, groq_factory):
+		groq = groq_factory.return_value
+		groq.chat.completions.create.return_value = provider_response(json.dumps(VALID_RESPONSE))
+		GroqClient(model='llama-3.3-70b-versatile').ask('prompt')
+		self.assertEqual(
+			groq.chat.completions.create.call_args.kwargs['response_format'],
+			{'type': 'json_object'},
+		)
+
+	@override_settings(GROQ_API_KEY=MOCK_API_KEY)
+	@patch('clinicalDecisionAI.services.Groq')
 	def test_successful_groq_request_returns_validated_response(self, groq_factory):
 		groq = groq_factory.return_value
 		groq.chat.completions.create.return_value = provider_response(
@@ -372,7 +400,7 @@ class GroqServiceTests(TestCase):
 		)
 		call = groq.chat.completions.create.call_args.kwargs
 		self.assertIn(call['model'], ('openai/gpt-oss-120b', 'openai/gpt-oss-20b'))
-		self.assertEqual(call['response_format'], {'type': 'json_object'})
+		self.assertEqual(call['response_format']['type'], 'json_schema')
 		self.assertNotIn('318', call['messages'][1]['content'])
 		self.assertTrue(call['messages'][0]['content'].find('not a doctor') >= 0)
 		self.assertIn('supported_diagnosis', call['messages'][0]['content'])
@@ -384,6 +412,42 @@ class GroqServiceTests(TestCase):
 		with self.assertRaises(GroqConfigurationError):
 			GroqClient()
 		groq_factory.assert_not_called()
+
+	@override_settings(GROQ_API_KEY=MOCK_API_KEY)
+	@patch('clinicalDecisionAI.services.Groq')
+	def test_response_formatting_is_normalized_to_expected_fields(self, groq_factory):
+		formatted = {
+			' Supported Diagnosis ': [VALID_RESPONSE['supported_diagnosis']],
+			'POSSIBLE-DISEASE': VALID_RESPONSE['possible_disease'][0],
+			'Drugs Admissible': [],
+			'Further Labs To Be Done': VALID_RESPONSE['further_labs_to_be_done'][0],
+		}
+		for content in (
+			json.dumps(formatted),
+			'```json\n' + json.dumps(formatted) + '\n```',
+			'```\n' + json.dumps(formatted) + '\n```',
+		):
+			with self.subTest(content=content):
+				groq_factory.return_value.chat.completions.create.return_value = provider_response(content)
+				result = run_clinical_analysis(ClinicalAnalysisRequest(symptoms=['fever']))
+				self.assertEqual(result.model_dump(), VALID_RESPONSE)
+
+	@override_settings(GROQ_API_KEY=MOCK_API_KEY)
+	@patch('clinicalDecisionAI.services.Groq')
+	def test_normalization_does_not_guess_missing_or_ambiguous_clinical_values(self, groq_factory):
+		for output in (
+			{**VALID_RESPONSE, 'Supported Diagnosis': 'Conflicting assessment'},
+			{**VALID_RESPONSE, 'supported_diagnosis': ['First assessment', 'Second assessment']},
+			{**VALID_RESPONSE, 'possible_disease': {'condition': 'Example differential'}},
+			{**VALID_RESPONSE, 'drugs_admissible': None},
+			{**VALID_RESPONSE, 'further_labs_to_be_done': ''},
+			{'supported_diagnosis': VALID_RESPONSE['supported_diagnosis']},
+		):
+			with self.subTest(output=output):
+				groq_factory.return_value.chat.completions.create.return_value = provider_response(json.dumps(output))
+				with self.assertRaises(ClinicalResponseError) as error:
+					run_clinical_analysis(ClinicalAnalysisRequest(symptoms=['fever']))
+				self.assertEqual(error.exception.category, 'schema_validation')
 
 	@override_settings(GROQ_API_KEY=MOCK_API_KEY)
 	@patch('clinicalDecisionAI.services.Groq')
@@ -459,6 +523,57 @@ class GroqServiceTests(TestCase):
 
 		self.assertEqual(context.exception.category, 'schema_validation')
 
+	@override_settings(GROQ_API_KEY=MOCK_API_KEY, CLINICAL_LOG_INVALID_OUTPUT=False)
+	@patch('clinicalDecisionAI.services.Groq')
+	def test_schema_failure_logs_safe_diagnostics_without_clinical_content(self, groq_factory):
+		invalid_response = {
+			**VALID_RESPONSE,
+			'possible_disease': ['private clinical content', 1],
+			'private unexpected key': 'private value',
+		}
+		groq_factory.return_value.chat.completions.create.return_value = provider_response(
+			json.dumps(invalid_response)
+		)
+		with self.assertLogs('clinicalDecisionAI.services', level='WARNING') as logs:
+			with self.assertRaises(ClinicalResponseError):
+				run_clinical_analysis(ClinicalAnalysisRequest(symptoms=['fever']), model='openai/gpt-oss-20b')
+		message = '\n'.join(logs.output)
+		self.assertIn('openai/gpt-oss-20b', message)
+		self.assertIn('possible_disease', message)
+		self.assertIn('string_type', message)
+		self.assertIn('extra_forbidden', message)
+		self.assertNotIn('private', message)
+
+	@override_settings(GROQ_API_KEY=MOCK_API_KEY, CLINICAL_LOG_INVALID_OUTPUT=True)
+	@patch('clinicalDecisionAI.services.Groq')
+	def test_debug_logs_show_exact_rejected_output_and_validation_details(self, groq_factory):
+		for content, category in (
+			('{not json\n', 'invalid_json'),
+			(json.dumps({**VALID_RESPONSE, 'possible_disease': [1]}), 'schema_validation'),
+			('[]', 'schema_validation'),
+			('  ', 'empty_response'),
+			(None, 'empty_response'),
+		):
+			with self.subTest(content=content):
+				groq_factory.return_value.chat.completions.create.return_value = provider_response(content)
+				with self.assertLogs('clinicalDecisionAI.services', level='WARNING') as logs:
+					with self.assertRaises(ClinicalResponseError):
+						run_clinical_analysis(ClinicalAnalysisRequest(symptoms=['fever']), model='openai/gpt-oss-20b')
+				self.assertEqual(len(logs.records), 1)
+				message = logs.records[0].getMessage()
+				self.assertNotIn('\n', message)
+				details = json.loads(message.split('Clinical AI response rejected: ', 1)[1])
+				self.assertEqual(details['output'], content)
+				self.assertEqual(details['error_category'], category)
+				self.assertEqual(details['model'], 'openai/gpt-oss-20b')
+				if content == '{not json\n':
+					self.assertEqual(details['issues'][0]['line'], 1)
+					self.assertEqual(details['issues'][0]['column'], 2)
+				elif content and 'possible_disease' in content:
+					self.assertEqual(details['issues'][0]['loc'], ['possible_disease', 0])
+					self.assertEqual(details['issues'][0]['input'], 1)
+					self.assertEqual(details['issues'][0]['msg'], 'Input should be a valid string')
+
 	@override_settings(GROQ_API_KEY=MOCK_API_KEY)
 	@patch('clinicalDecisionAI.services.Groq')
 	def test_non_object_json_and_extra_output_fields_are_rejected(self, groq_factory):
@@ -479,6 +594,32 @@ class ClinicalAnalysisEndpointTests(TestCase):
 			token_hash=hash_integration_token(self.token),
 		)
 		self.auth_headers = {'HTTP_AUTHORIZATION': f'Bearer {self.token}'}
+
+	@override_settings(GROQ_API_KEY=MOCK_API_KEY)
+	@patch('clinicalDecisionAI.services.Groq')
+	def test_endpoint_returns_normalized_provider_output(self, groq_factory):
+		output = {
+			'Supported Diagnosis': VALID_RESPONSE['supported_diagnosis'],
+			'Possible Disease': VALID_RESPONSE['possible_disease'][0],
+			'Drugs Admissible': [],
+			'Further Labs To Be Done': VALID_RESPONSE['further_labs_to_be_done'][0],
+		}
+		groq_factory.return_value.chat.completions.create.return_value = provider_response(
+			'```json\n' + json.dumps(output) + '\n```'
+		)
+		response = self.client.post(
+			'/api/clinical-ai/analyze/',
+			data=json.dumps({'symptoms': ['fever']}),
+			content_type='application/json',
+			**self.auth_headers,
+		)
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(
+			{key: value for key, value in response.json().items() if key != 'triage'},
+			VALID_RESPONSE,
+		)
+		self.assertEqual(response.json()['triage']['level'], 'not_assessed')
+		self.assertEqual(response['X-Clinical-Review-Required'], 'true')
 
 	def test_browser_get_explains_post_api_usage(self):
 		response = self.client.get('/api/clinical-ai/analyze/')
