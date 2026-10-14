@@ -18,3 +18,16 @@ class IntegrationApplication(models.Model):
 
 	def __str__(self):
 		return self.name
+
+
+# Import triage models so Django migration system discovers them.
+# These live in the triage subpackage but belong to the clinicalDecisionAI app.
+from clinicalDecisionAI.triage.models import (  # noqa: E402, F401
+	AuditEvent,
+	ClinicalRole,
+	ReassessmentFlag,
+	ReferralProposal,
+	TriageApproval,
+	TriageAssessment,
+	TriageEncounter,
+)
