@@ -199,3 +199,18 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
+
+# ---------------------------------------------------------------------------
+# Local model (Ollama) and AI backend selection
+# ---------------------------------------------------------------------------
+# AI_BACKEND: 'local' (Ollama, patient data stays on-premises) or 'groq' (cloud)
+# Set USE_LOCAL_MODEL=true to force local inference for all requests.
+AI_BACKEND = os.getenv('AI_BACKEND', 'groq').strip().lower()
+USE_LOCAL_MODEL = os.getenv('USE_LOCAL_MODEL', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
+OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434').strip()
+LOCAL_MODEL = os.getenv('LOCAL_MODEL', 'llama3.2:3b').strip()
+OLLAMA_TIMEOUT_SECONDS = _positive_env('OLLAMA_TIMEOUT_SECONDS', 120.0)
+
+# Triage-specific settings
+TRIAGE_APPROVAL_EXPIRY_MINUTES = _positive_env('TRIAGE_APPROVAL_EXPIRY_MINUTES', 60, int)
+TRIAGE_AGENT_TIMEOUT_SECONDS = _positive_env('TRIAGE_AGENT_TIMEOUT_SECONDS', 60.0)
