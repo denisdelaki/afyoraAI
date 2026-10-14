@@ -974,6 +974,41 @@ class AccountIntegrationFlowTests(TestCase):
 
 		self.assertRedirects(response, '/accounts/login/?next=/sandbox/')
 
+	@override_settings(DEBUG=True)
+	def test_sandbox_defaults_to_nurse_in_debug_mode(self):
+		from clinicalDecisionAI.triage.models import ClinicalRole
+
+		user = get_user_model().objects.create_user(username='sandbox-nurse')
+		self.client.force_login(user)
+
+		for _ in range(2):
+			response = self.client.get('/sandbox/')
+			self.assertEqual(response.status_code, 200)
+		self.assertEqual(ClinicalRole.objects.get(user=user).role, ClinicalRole.NURSE)
+		self.assertContains(response, 'Nurse / Triage Clinician')
+
+	@override_settings(DEBUG=True)
+	def test_sandbox_preserves_existing_clinical_role(self):
+		from clinicalDecisionAI.triage.models import ClinicalRole
+
+		user = get_user_model().objects.create_user(username='sandbox-admin')
+		ClinicalRole.objects.create(user=user, role=ClinicalRole.ADMIN)
+		self.client.force_login(user)
+
+		self.assertEqual(self.client.get('/sandbox/').status_code, 200)
+		self.assertEqual(ClinicalRole.objects.get(user=user).role, ClinicalRole.ADMIN)
+
+	@override_settings(DEBUG=False)
+	def test_sandbox_does_not_assign_clinical_role_in_production(self):
+		from clinicalDecisionAI.triage.models import ClinicalRole
+
+		user = get_user_model().objects.create_user(username='sandbox-no-role')
+		self.client.force_login(user)
+
+		response = self.client.get('/sandbox/')
+		self.assertEqual(response.status_code, 200)
+		self.assertFalse(ClinicalRole.objects.filter(user=user).exists())
+
 	@patch('clinicalDecisionAI.views.run_clinical_analysis')
 	def test_sandbox_runs_validated_analysis_without_application_token(self, analyze):
 		user = get_user_model().objects.create_user(

@@ -1,146 +1,1323 @@
 {% extends "clinicalDecisionAI/base.html" %} {% block title %}AI sandbox |
 Afyora Clinical AI{% endblock %} {% block content %}
 <p class="muted">DEVELOPER CONSOLE / SANDBOX</p>
-<h1>Test a clinical analysis</h1>
-<p class="intro">
-  Try the same prompt, Groq provider, and response validation used by the API
-  before connecting your application.
-</p>
-
-<div class="sandbox-warning">
-  <strong>Use synthetic or properly de-identified data only.</strong>
-  Submitting this form sends the entered clinical information to the configured
-  AI provider and may use API quota. Sandbox results are not clinical advice;
-  qualified clinician review is required. Requests and results are not saved by
-  this application.
-</div>
-
-{% if error %}
-<div class="notice error" role="alert">
-  <strong>{{ error }}</strong>
-  {% if error_details %}
-  <ul>
-    {% for detail in error_details %}
-    <li>{{ detail }}</li>
-    {% endfor %}
-  </ul>
-  {% endif %}
-  <p class="muted">Request ID: <code>{{ request_id }}</code></p>
-</div>
-{% endif %} {% if triage %}
-<section
-  class="notice{% if triage.urgent_care_recommended %} error{% endif %}"
-  role="status"
-  aria-live="polite"
+<div
+  class="language-tabs sandbox-tabs"
+  role="tablist"
+  aria-label="Sandbox tools"
 >
-  <h2>Vital-sign triage</h2>
-  {% if triage.urgent_care_recommended %}
-  <strong>Urgent clinical assessment recommended now</strong>
-  {% elif triage.level == 'not_assessed' %}
-  <strong>Triage could not be fully assessed</strong>
-  {% else %}
-  <strong>No configured threshold triggered</strong>
-  {% endif %}
-  <p>{{ triage.recommendation }}</p>
-  {% if triage.reasons %}
-  <ul>
-    {% for reason in triage.reasons %}
-    <li>{{ reason }}</li>
-    {% endfor %}
-  </ul>
-  {% endif %} {% if triage.unassessed_vitals %}
-  <p>Unassessed measurements: {{ triage.unassessed_vitals|join:", " }}</p>
-  {% endif %}
-</section>
-{% endif %}
+  <button
+    type="button"
+    id="tab-clinical-decision"
+    role="tab"
+    aria-controls="panel-clinical-decision"
+    aria-selected="true"
+    tabindex="0"
+  >
+    Clinical Decision
+  </button>
+  <button
+    type="button"
+    id="tab-triage"
+    role="tab"
+    aria-controls="panel-triage"
+    aria-selected="false"
+    tabindex="-1"
+  >
+    Triage
+  </button>
+</div>
 
-<div class="sandbox-layout">
-  <section class="section">
-    <h2>Sample patient data</h2>
-    <p class="muted">
-      Edit the JSON payload, then run an analysis. The input follows the same
-      schema as the API request.
-    </p>
-    <form method="post">
-      {% csrf_token %}
-      <label for="patient_json">Clinical input (JSON)</label>
-      <textarea
-        id="patient_json"
-        name="patient_json"
-        spellcheck="false"
-        required
-      >
-{{ patient_json }}</textarea
-      >
-      <button class="form-submit" type="submit">Run sandbox analysis</button>
-    </form>
-  </section>
+<div
+  id="panel-clinical-decision"
+  class="sandbox-tab-panel"
+  role="tabpanel"
+  aria-labelledby="tab-clinical-decision"
+>
+  <h1>Test a clinical analysis</h1>
+  <p class="intro">
+    Try the same prompt, Groq provider, and response validation used by the API
+    before connecting your application.
+  </p>
 
-  <section class="section" aria-live="polite">
-    <h2>Analysis result</h2>
-    {% if selected_model %}
-    <p class="muted">Selected Groq model: <code>{{ selected_model }}</code></p>
-    {% endif %} {% if result %}
-    <div class="notice">
-      <strong>AI Clinical Decision Support</strong>
-      <p>
-        For testing only. A qualified healthcare professional must review the
-        result before any clinical decision.
-      </p>
-    </div>
-    <div class="result-heading">
-      <h3>Provisional assessment</h3>
-    </div>
-    <p>{{ result.supported_diagnosis }}</p>
+  <div class="sandbox-warning">
+    <strong>Use synthetic or properly de-identified data only.</strong>
+    Submitting this form sends the entered clinical information to the
+    configured AI provider and may use API quota. Sandbox results are not
+    clinical advice; qualified clinician review is required. Requests and
+    results are not saved by this application.
+  </div>
 
-    <section class="result-block">
-      <h3>Possible conditions</h3>
-      <ul class="result-list">
-        {% for condition in result.possible_disease %}
-        <li>{{ condition }}</li>
-        {% empty %}
-        <li>No possible conditions were returned.</li>
-        {% endfor %}
-      </ul>
-    </section>
-
-    <section class="result-block">
-      <h3>Recommended investigations</h3>
-      {% if result.further_labs_to_be_done %}
-      <ul class="result-list">
-        {% for item in result.further_labs_to_be_done %}
-        <li>{{ item }}</li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted">None suggested.</p>
-      {% endif %}
-    </section>
-    <section class="result-block">
-      <h3>Medication considerations</h3>
-      <p class="muted">
-        Advisory only, not a prescription or authorization to administer
-        medication.
-      </p>
-      {% if result.drugs_admissible %}
-      <ul class="result-list">
-        {% for item in result.drugs_admissible %}
-        <li>{{ item }}</li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted">None returned.</p>
-      {% endif %}
-    </section>
-    <section class="result-block">
-      <h3>Clinical review</h3>
-      <p><strong>Human clinician review required: Yes</strong></p>
-    </section>
+  {% if error %}
+  <div class="notice error" role="alert">
+    <strong>{{ error }}</strong>
+    {% if error_details %}
+    <ul>
+      {% for detail in error_details %}
+      <li>{{ detail }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <p class="muted">Request ID: <code>{{ request_id }}</code></p>
+  </div>
+  {% endif %} {% if triage %}
+  <section
+    class="notice{% if triage.urgent_care_recommended %} error{% endif %}"
+    role="status"
+    aria-live="polite"
+  >
+    <h2>Vital-sign triage</h2>
+    {% if triage.urgent_care_recommended %}
+    <strong>Urgent clinical assessment recommended now</strong>
+    {% elif triage.level == 'not_assessed' %}
+    <strong>Triage could not be fully assessed</strong>
     {% else %}
-    <p class="muted">
-      Your validated result will appear here after you run a test.
-    </p>
+    <strong>No configured threshold triggered</strong>
+    {% endif %}
+    <p>{{ triage.recommendation }}</p>
+    {% if triage.reasons %}
+    <ul>
+      {% for reason in triage.reasons %}
+      <li>{{ reason }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %} {% if triage.unassessed_vitals %}
+    <p>Unassessed measurements: {{ triage.unassessed_vitals|join:", " }}</p>
     {% endif %}
   </section>
+  {% endif %}
+
+  <div class="sandbox-layout">
+    <section class="section">
+      <h2>Sample patient data</h2>
+      <p class="muted">
+        Edit the JSON payload, then run an analysis. The input follows the same
+        schema as the API request.
+      </p>
+      <form method="post" action="#clinical-decision">
+        {% csrf_token %}
+        <label for="patient_json">Clinical input (JSON)</label>
+        <textarea
+          id="patient_json"
+          name="patient_json"
+          spellcheck="false"
+          required
+        >
+{{ patient_json }}</textarea
+        >
+        <button class="form-submit" type="submit">Run sandbox analysis</button>
+      </form>
+    </section>
+
+    <section class="section" aria-live="polite">
+      <h2>Analysis result</h2>
+      {% if selected_model %}
+      <p class="muted">
+        Selected Groq model: <code>{{ selected_model }}</code>
+      </p>
+      {% endif %} {% if result %}
+      <div class="notice">
+        <strong>AI Clinical Decision Support</strong>
+        <p>
+          For testing only. A qualified healthcare professional must review the
+          result before any clinical decision.
+        </p>
+      </div>
+      <div class="result-heading">
+        <h3>Provisional assessment</h3>
+      </div>
+      <p>{{ result.supported_diagnosis }}</p>
+
+      <section class="result-block">
+        <h3>Possible conditions</h3>
+        <ul class="result-list">
+          {% for condition in result.possible_disease %}
+          <li>{{ condition }}</li>
+          {% empty %}
+          <li>No possible conditions were returned.</li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="result-block">
+        <h3>Recommended investigations</h3>
+        {% if result.further_labs_to_be_done %}
+        <ul class="result-list">
+          {% for item in result.further_labs_to_be_done %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">None suggested.</p>
+        {% endif %}
+      </section>
+      <section class="result-block">
+        <h3>Medication considerations</h3>
+        <p class="muted">
+          Advisory only, not a prescription or authorization to administer
+          medication.
+        </p>
+        {% if result.drugs_admissible %}
+        <ul class="result-list">
+          {% for item in result.drugs_admissible %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">None returned.</p>
+        {% endif %}
+      </section>
+      <section class="result-block">
+        <h3>Clinical review</h3>
+        <p><strong>Human clinician review required: Yes</strong></p>
+      </section>
+      {% else %}
+      <p class="muted">
+        Your validated result will appear here after you run a test.
+      </p>
+      {% endif %}
+    </section>
+  </div>
 </div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     THE TRIAGE DESK — Interactive workflow sandbox
+     ══════════════════════════════════════════════════════════════════════ -->
+
+<div
+  id="panel-triage"
+  class="sandbox-tab-panel"
+  role="tabpanel"
+  aria-labelledby="tab-triage"
+  hidden
+>
+  <h1>The Triage Desk — Live Triage Workflow</h1>
+  <p class="intro">
+    Test the complete multi-step SATS triage workflow end-to-end: encounter
+    registration → agentic assessment → clinician approval → reassessment flag.
+    All four steps call the live triage API.
+  </p>
+
+  <div class="sandbox-warning" role="alert">
+    <strong>⚠ Use synthetic data only.</strong>
+    This sandbox calls the live triage API and saves to the database. Do not
+    enter real patient information. Results require qualified clinician review.
+  </div>
+
+  <!-- Quick scenario picker -->
+  <div class="td-scenario-bar" role="group" aria-label="Quick triage scenarios">
+    <span class="td-scenario-label">Quick scenarios:</span>
+    <button type="button" class="td-scenario-btn" data-scenario="normal">
+      🟢 Normal adult
+    </button>
+    <button type="button" class="td-scenario-btn" data-scenario="urgent">
+      🟠 Urgent (chest pain)
+    </button>
+    <button type="button" class="td-scenario-btn" data-scenario="emergency">
+      🔴 Emergency (RED)
+    </button>
+    <button type="button" class="td-scenario-btn" data-scenario="missing">
+      ⬜ Missing vitals
+    </button>
+  </div>
+
+  <div class="td-layout">
+    <!-- LEFT: Step-by-step input -->
+    <div class="td-input-col">
+      <!-- Step 1 -->
+      <div class="td-step-card" id="td-step-encounter">
+        <div class="td-step-header">
+          <span class="td-step-badge">1</span>
+          <h2 class="td-step-title">Register Encounter</h2>
+          <span
+            class="td-step-status"
+            id="td-status-encounter"
+            aria-live="polite"
+          ></span>
+        </div>
+        <p class="muted" style="margin: 0 0 12px">
+          Patient details — no identifying information.
+        </p>
+        <label for="td-age">Age (years)</label>
+        <input id="td-age" type="number" min="0" max="120" value="45" />
+        <label for="td-pregnant">Pregnancy status</label>
+        <select id="td-pregnant">
+          <option value="false">Not pregnant / not applicable</option>
+          <option value="true">Pregnant</option>
+        </select>
+        <label for="td-symptoms">Presenting complaints (one per line)</label>
+        <textarea id="td-symptoms" rows="3">
+chest pain
+shortness of breath</textarea
+        >
+        <label for="td-hr">Heart rate (bpm)</label>
+        <input id="td-hr" type="number" placeholder="e.g. 135" value="135" />
+        <label for="td-rr">Respiratory rate (breaths/min)</label>
+        <input id="td-rr" type="number" placeholder="e.g. 26" value="26" />
+        <label for="td-spo2">SpO₂ (%)</label>
+        <input id="td-spo2" type="number" placeholder="e.g. 91" value="91" />
+        <label for="td-bp">Blood pressure (mmHg)</label>
+        <input
+          id="td-bp"
+          type="text"
+          placeholder="e.g. 110/70"
+          value="110/70"
+        />
+        <label for="td-temp">Temperature (°C)</label>
+        <input
+          id="td-temp"
+          type="number"
+          step="0.1"
+          placeholder="e.g. 38.5"
+          value="38.5"
+        />
+        <button id="td-btn-encounter" type="button" class="td-primary-btn">
+          ＋ Register Encounter
+        </button>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="td-step-card td-dimmed" id="td-step-assess">
+        <div class="td-step-header">
+          <span class="td-step-badge">2</span>
+          <h2 class="td-step-title">Run SATS Assessment</h2>
+          <span
+            class="td-step-status"
+            id="td-status-assess"
+            aria-live="polite"
+          ></span>
+        </div>
+        <p class="muted" style="margin: 0 0 12px">
+          Runs the LangGraph agent: vitals validation → deterministic SATS rules
+          → AI advisory → priority proposal. Awaits clinician approval.
+        </p>
+        <button
+          id="td-btn-assess"
+          type="button"
+          class="td-primary-btn"
+          disabled
+        >
+          ▶ Run Assessment
+        </button>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="td-step-card td-dimmed" id="td-step-approve">
+        <div class="td-step-header">
+          <span class="td-step-badge">3</span>
+          <h2 class="td-step-title">Clinician Approval</h2>
+          <span
+            class="td-step-status"
+            id="td-status-approve"
+            aria-live="polite"
+          ></span>
+        </div>
+        <p class="muted">
+          Clinical role:
+          <strong
+            >{{ request.user.clinical_role.get_role_display|default:"Not
+            assigned" }}</strong
+          >
+        </p>
+        <p class="muted" style="margin: 0 0 12px">
+          In production, a nurse or doctor with a clinical role approves via the
+          portal. Simulate either decision here.
+        </p>
+        <label for="td-comments">Clinician comments (optional)</label>
+        <input
+          id="td-comments"
+          type="text"
+          placeholder="e.g. Assessed at bedside — priority confirmed."
+        />
+        <div class="td-btn-row">
+          <button
+            id="td-btn-approve"
+            type="button"
+            class="td-primary-btn"
+            disabled
+          >
+            ✓ Approve
+          </button>
+          <button
+            id="td-btn-reject"
+            type="button"
+            class="td-secondary-btn"
+            disabled
+          >
+            ✗ Reject
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="td-step-card td-dimmed" id="td-step-reassess">
+        <div class="td-step-header">
+          <span class="td-step-badge">4</span>
+          <h2 class="td-step-title">Flag Reassessment</h2>
+          <span
+            class="td-step-status"
+            id="td-status-reassess"
+            aria-live="polite"
+          ></span>
+        </div>
+        <p class="muted" style="margin: 0 0 12px">
+          Flag a change in observations. Queue position is
+          <strong>not changed</strong> — a clinician must review.
+        </p>
+        <label for="td-reassess-reason">Reason</label>
+        <input
+          id="td-reassess-reason"
+          type="text"
+          placeholder="e.g. Patient reports worsening dyspnoea"
+        />
+        <label for="td-new-symptoms">New symptoms (one per line)</label>
+        <textarea
+          id="td-new-symptoms"
+          rows="2"
+          placeholder="worsening dyspnoea"
+        ></textarea>
+        <button
+          id="td-btn-reassess"
+          type="button"
+          class="td-primary-btn"
+          disabled
+        >
+          ⚑ Flag Reassessment
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Live output -->
+    <div class="td-output-col">
+      <div class="td-output-card">
+        <div class="td-output-header">
+          <h2 style="margin: 0; font-size: 17px">Live Output</h2>
+          <button id="td-btn-reset" type="button" class="td-ghost-btn">
+            ↺ Reset
+          </button>
+        </div>
+
+        <!-- Priority display -->
+        <div id="td-priority-display" class="td-priority-display" hidden>
+          <div class="td-priority-label">Proposed Priority</div>
+          <div id="td-priority-badge" class="td-priority-badge">—</div>
+          <div id="td-priority-confirmed" class="td-priority-confirmed" hidden>
+            <span>✓</span> Clinician confirmed
+          </div>
+        </div>
+
+        <!-- Timeline -->
+        <ol class="td-timeline" id="td-timeline"></ol>
+
+        <!-- Empty state -->
+        <div class="td-empty" id="td-empty">
+          <div style="font-size: 36px; margin-bottom: 10px">🏥</div>
+          <p class="muted">
+            Register an encounter to begin the triage workflow.
+          </p>
+        </div>
+
+        <!-- JSON viewer -->
+        <div id="td-json-panel" hidden>
+          <div class="td-json-header">
+            <span class="td-json-label">Last API response</span>
+            <button
+              type="button"
+              id="td-btn-copy-json"
+              class="td-ghost-btn"
+              title="Copy JSON"
+            >
+              ⎘ Copy
+            </button>
+          </div>
+          <pre
+            id="td-json-pre"
+            class="td-json-pre"
+          ><code id="td-json-code"></code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- /.td-layout -->
+</div>
+
+<!-- ── Triage Desk scoped styles ── -->
+<style>
+  .sandbox-tabs {
+    margin: 20px 0 24px;
+  }
+  .sandbox-tabs button:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 3px;
+  }
+  .sandbox-tab-panel[hidden] {
+    display: none;
+  }
+  .sandbox-tab-panel h1 {
+    overflow-wrap: anywhere;
+  }
+
+  .td-scenario-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 20px 0 24px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .td-scenario-label {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .td-scenario-btn {
+    padding: 5px 12px;
+    min-height: 32px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    background: white;
+    color: var(--ink);
+    font: 13px/1 inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .td-scenario-btn:hover {
+    border-color: var(--green);
+    color: var(--green-dark);
+  }
+
+  .td-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
+    margin-top: 8px;
+  }
+  .td-input-col {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .td-step-card {
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    transition:
+      opacity 0.2s,
+      filter 0.2s,
+      box-shadow 0.2s;
+  }
+  .td-dimmed {
+    opacity: 0.5;
+    pointer-events: none;
+    filter: grayscale(0.3);
+  }
+  .td-active {
+    border-color: var(--green);
+    box-shadow: 0 0 0 2px #d0ede2;
+    opacity: 1;
+    pointer-events: auto;
+    filter: none;
+  }
+  .td-done {
+    opacity: 1;
+    pointer-events: auto;
+    filter: none;
+    border-color: #9bc8b4;
+  }
+
+  .td-step-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .td-step-title {
+    margin: 0;
+    font-size: 16px;
+  }
+  .td-step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--green);
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .td-step-status {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .td-step-status.ok {
+    color: #176b55;
+    font-weight: 600;
+  }
+  .td-step-status.err {
+    color: var(--red);
+    font-weight: 600;
+  }
+
+  .td-step-card label {
+    display: block;
+    margin: 10px 0 3px;
+    font-size: 13px;
+    font-weight: 650;
+  }
+  .td-step-card input,
+  .td-step-card select,
+  .td-step-card textarea {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid #adbfb7;
+    border-radius: 4px;
+    background: #fff;
+    color: var(--ink);
+    font: 13px/1.4 inherit;
+  }
+  .td-step-card select {
+    min-height: 34px;
+  }
+  .td-step-card textarea {
+    resize: vertical;
+  }
+  .td-step-card input:focus,
+  .td-step-card select:focus,
+  .td-step-card textarea:focus {
+    outline: 2px solid #a9d6c6;
+    border-color: var(--green);
+  }
+
+  .td-primary-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 9px 16px;
+    min-height: 38px;
+    border: 0;
+    border-radius: 5px;
+    background: var(--green);
+    color: white;
+    font: 13px/1 inherit;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .td-primary-btn:hover:not(:disabled) {
+    background: var(--green-dark);
+  }
+  .td-primary-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .td-secondary-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 9px 16px;
+    min-height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: white;
+    color: var(--red);
+    font: 13px/1 inherit;
+    font-weight: 650;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .td-secondary-btn:hover:not(:disabled) {
+    border-color: var(--red);
+    background: #fff4f2;
+  }
+  .td-secondary-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .td-ghost-btn {
+    padding: 5px 9px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    font: 12px/1 inherit;
+    cursor: pointer;
+  }
+  .td-ghost-btn:hover {
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .td-btn-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .td-output-card {
+    position: sticky;
+    top: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .td-output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .td-priority-display {
+    padding: 14px;
+    background: var(--paper);
+    border-radius: 6px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .td-priority-label {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .td-priority-badge {
+    display: inline-block;
+    padding: 7px 18px;
+    border-radius: 4px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    background: #e8eef0;
+    color: #546e6a;
+  }
+  .td-priority-badge.RED {
+    background: #fce8e6;
+    color: #8c1c1c;
+  }
+  .td-priority-badge.ORANGE {
+    background: #fff0e0;
+    color: #7a4210;
+  }
+  .td-priority-badge.YELLOW {
+    background: #fffde6;
+    color: #6d5b00;
+  }
+  .td-priority-badge.GREEN {
+    background: #e6f4ec;
+    color: #155c3a;
+  }
+  .td-priority-badge.NOT_ASSESSED {
+    background: #eef0f2;
+    color: #5a6672;
+  }
+  .td-priority-confirmed {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--green-dark);
+    font-weight: 600;
+  }
+
+  .td-timeline {
+    margin: 0 0 14px;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+  }
+  .td-tl-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .td-tl-item:last-child {
+    border-bottom: 0;
+  }
+  .td-tl-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+  }
+  .td-tl-icon.pending {
+    background: #e8eef0;
+    color: #7a8b8a;
+  }
+  .td-tl-icon.ok {
+    background: #e6f4ec;
+    color: var(--green-dark);
+  }
+  .td-tl-icon.err {
+    background: #fce8e6;
+    color: var(--red);
+  }
+  .td-tl-icon.loading {
+    background: #e8f0fe;
+    color: #1a6ac4;
+    animation: tl-spin 0.8s linear infinite;
+  }
+  @keyframes tl-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .td-tl-body {
+    flex: 1;
+  }
+  .td-tl-title {
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .td-tl-detail {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-top: 2px;
+  }
+  .td-tl-time {
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    margin-left: auto;
+    padding-top: 2px;
+  }
+
+  .td-empty {
+    text-align: center;
+    padding: 36px 16px;
+    color: var(--muted);
+  }
+
+  .td-json-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .td-json-label {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .td-json-pre {
+    max-height: 280px;
+    overflow: auto;
+    margin: 0;
+    padding: 12px;
+    border-radius: 4px;
+    background: #152724;
+    color: #d4f0e3;
+    font:
+      11px/1.5 ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      monospace;
+    white-space: pre;
+    border: 1px solid #2a4540;
+  }
+
+  @media (max-width: 860px) {
+    .td-layout {
+      grid-template-columns: 1fr;
+    }
+    .td-output-card {
+      position: static;
+    }
+  }
+</style>
+
+<script>
+  (function () {
+    const tabs = Array.from(
+      document.querySelectorAll('.sandbox-tabs [role="tab"]'),
+    );
+
+    function selectTab(tab, focus) {
+      tabs.forEach((item) => {
+        const selected = item === tab;
+        item.setAttribute("aria-selected", String(selected));
+        item.tabIndex = selected ? 0 : -1;
+        document.getElementById(item.getAttribute("aria-controls")).hidden =
+          !selected;
+      });
+      if (focus) tab.focus();
+    }
+
+    function selectTabFromHash() {
+      const tab = tabs.find(
+        (item) => "#" + item.id.replace("tab-", "") === window.location.hash,
+      );
+      selectTab(tab || tabs[0], false);
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => {
+        selectTab(tab, false);
+        window.history.replaceState(null, "", "#" + tab.id.replace("tab-", ""));
+      });
+      tab.addEventListener("keydown", (event) => {
+        let nextIndex;
+        if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+        else if (event.key === "ArrowLeft")
+          nextIndex = (index - 1 + tabs.length) % tabs.length;
+        else if (event.key === "Home") nextIndex = 0;
+        else if (event.key === "End") nextIndex = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        tabs[nextIndex].click();
+        tabs[nextIndex].focus();
+      });
+    });
+    window.addEventListener("hashchange", selectTabFromHash);
+    selectTabFromHash();
+
+    // ── state ─────────────────────────────────────
+    const td = { encounterId: null, approvalId: null };
+    const csrf = "{{ csrf_token }}";
+
+    // ── scenarios ─────────────────────────────────
+    const SCENARIOS = {
+      normal: {
+        age: 35,
+        preg: "false",
+        symptoms: "mild headache\nfatigue",
+        hr: 72,
+        rr: 16,
+        spo2: 98,
+        bp: "120/75",
+        temp: 37.0,
+      },
+      urgent: {
+        age: 52,
+        preg: "false",
+        symptoms: "chest pain\nshortness of breath",
+        hr: 135,
+        rr: 26,
+        spo2: 91,
+        bp: "110/70",
+        temp: 38.8,
+      },
+      emergency: {
+        age: 65,
+        preg: "false",
+        symptoms: "unconscious\nno response to voice",
+        hr: 38,
+        rr: 9,
+        spo2: 85,
+        bp: "78/50",
+        temp: 34.2,
+      },
+      missing: {
+        age: 40,
+        preg: "false",
+        symptoms: "dizziness\nnausea",
+        hr: "",
+        rr: "",
+        spo2: "",
+        bp: "",
+        temp: "",
+      },
+    };
+
+    document.querySelectorAll(".td-scenario-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const s = SCENARIOS[btn.dataset.scenario];
+        if (!s) return;
+        g("td-age").value = s.age;
+        g("td-pregnant").value = s.preg;
+        g("td-symptoms").value = s.symptoms;
+        g("td-hr").value = s.hr;
+        g("td-rr").value = s.rr;
+        g("td-spo2").value = s.spo2;
+        g("td-bp").value = s.bp;
+        g("td-temp").value = s.temp;
+      });
+    });
+
+    // ── helpers ───────────────────────────────────
+    function g(id) {
+      return document.getElementById(id);
+    }
+
+    function setCard(id, mode) {
+      const el = g(id);
+      if (!el) return;
+      el.classList.remove("td-dimmed", "td-active", "td-done");
+      if (mode) el.classList.add(mode);
+    }
+
+    function setStatus(id, text, cls) {
+      const el = g(id);
+      if (!el) return;
+      el.textContent = text;
+      el.className = "td-step-status" + (cls ? " " + cls : "");
+    }
+
+    let tlItems = [];
+    const TL_ICONS = { pending: "○", ok: "✓", err: "✕", loading: "⟳" };
+
+    function addTL(title, detail, state) {
+      const now = new Date().toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      const idx = tlItems.length;
+      tlItems.push({
+        title,
+        detail: detail || "",
+        state: state || "pending",
+        now,
+      });
+      renderTL();
+      return idx;
+    }
+    function updateTL(idx, state, detail) {
+      if (tlItems[idx]) {
+        tlItems[idx].state = state;
+        if (detail !== undefined) tlItems[idx].detail = detail;
+      }
+      renderTL();
+    }
+    function renderTL() {
+      const tl = g("td-timeline");
+      g("td-empty").hidden = tlItems.length > 0;
+      tl.innerHTML = tlItems
+        .map(
+          (item) => `
+      <li class="td-tl-item">
+        <span class="td-tl-icon ${item.state}" aria-hidden="true">${TL_ICONS[item.state] || "○"}</span>
+        <div class="td-tl-body">
+          <div class="td-tl-title">${item.title}</div>
+          ${item.detail ? `<div class="td-tl-detail">${item.detail}</div>` : ""}
+        </div>
+        <span class="td-tl-time">${item.now}</span>
+      </li>`,
+        )
+        .join("");
+    }
+
+    function showJSON(obj) {
+      g("td-json-panel").hidden = false;
+      g("td-json-code").textContent = JSON.stringify(obj, null, 2);
+    }
+
+    function setPriority(priority, confirmed) {
+      g("td-priority-display").hidden = false;
+      const badge = g("td-priority-badge");
+      badge.textContent = priority || "—";
+      badge.className = "td-priority-badge " + (priority || "");
+      g("td-priority-confirmed").hidden = !confirmed;
+    }
+
+    async function api(path, method, body) {
+      const h = { "Content-Type": "application/json", "X-CSRFToken": csrf };
+      const opts = { method, headers: h, credentials: "same-origin" };
+      if (body) opts.body = JSON.stringify(body);
+      const r = await fetch(window.location.origin + path, opts);
+      const data = await r.json().catch(() => ({ error: "Invalid JSON" }));
+      return { ok: r.ok, status: r.status, data };
+    }
+
+    // ── Step 1: Register ──────────────────────────
+    g("td-btn-encounter").addEventListener("click", async () => {
+      tlItems = [];
+      td.encounterId = null;
+      td.approvalId = null;
+      const btn = g("td-btn-encounter");
+      btn.disabled = true;
+      btn.textContent = "Registering…";
+      setCard("td-step-encounter", "td-active");
+      setStatus("td-status-encounter", "Sending…");
+
+      const symptoms = g("td-symptoms")
+        .value.split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const vitals = {};
+      const hv = (id) => {
+        const v = g(id).value;
+        return v !== "" ? Number(v) : undefined;
+      };
+      if (hv("td-hr") !== undefined) vitals.heart_rate = hv("td-hr");
+      if (hv("td-rr") !== undefined) vitals.respiratory_rate = hv("td-rr");
+      if (hv("td-spo2") !== undefined) vitals.oxygen_saturation = hv("td-spo2");
+      if (hv("td-temp") !== undefined) vitals.temperature = hv("td-temp");
+      const bp = g("td-bp").value;
+      if (bp) vitals.blood_pressure = bp;
+
+      const payload = {
+        age: Number(g("td-age").value) || null,
+        is_pregnant: g("td-pregnant").value === "true",
+        symptoms,
+        vitals,
+      };
+
+      const idx = addTL(
+        "POST /api/triage/encounters/",
+        "Registering…",
+        "loading",
+      );
+      const { ok, status, data } = await api(
+        "/api/triage/encounters/",
+        "POST",
+        payload,
+      );
+      btn.disabled = false;
+      btn.textContent = "＋ Register Encounter";
+
+      if (ok && data.encounter_id) {
+        td.encounterId = data.encounter_id;
+        updateTL(idx, "ok", `encounter_id: ${data.encounter_id.slice(0, 8)}…`);
+        setCard("td-step-encounter", "td-done");
+        setStatus("td-status-encounter", "✓ Created", "ok");
+        setCard("td-step-assess", "td-active");
+        g("td-btn-assess").disabled = false;
+        showJSON(data);
+      } else {
+        updateTL(idx, "err", data.error || data.detail || `HTTP ${status}`);
+        setCard("td-step-encounter", "td-active");
+        setStatus("td-status-encounter", "Error", "err");
+        showJSON(data);
+      }
+    });
+
+    // ── Step 2: Assess ────────────────────────────
+    g("td-btn-assess").addEventListener("click", async () => {
+      if (!td.encounterId) return;
+      const btn = g("td-btn-assess");
+      btn.disabled = true;
+      btn.textContent = "⟳ Running agent…";
+      setCard("td-step-assess", "td-active");
+      setStatus("td-status-assess", "Running…");
+
+      const idx = addTL(
+        `POST /api/triage/encounters/${td.encounterId.slice(0, 8)}…/assess/`,
+        "LangGraph: validate vitals → SATS rules → AI advisory → propose priority…",
+        "loading",
+      );
+      const { ok, status, data } = await api(
+        `/api/triage/encounters/${td.encounterId}/assess/`,
+        "POST",
+        {},
+      );
+      btn.textContent = "▶ Run Assessment";
+
+      if (ok) {
+        const priority = data.proposed_priority || "NOT_ASSESSED";
+        // API uses immediate_escalation_required (not immediate_escalation)
+        const escalation = data.immediate_escalation_required || false;
+        updateTL(
+          idx,
+          "ok",
+          `Priority: <strong>${priority}</strong> · escalation: ${escalation}`,
+        );
+        setCard("td-step-assess", "td-done");
+        setStatus("td-status-assess", `✓ ${priority}`, "ok");
+        setPriority(priority, false);
+
+        td.approvalId = data.approval_id || null;
+
+        if (escalation) {
+          addTL(
+            "🚨 IMMEDIATE ESCALATION",
+            data.recommendation || "Activate emergency procedures NOW.",
+            "err",
+          );
+        } else if (data.recommendation) {
+          addTL("Recommendation", data.recommendation, "ok");
+        }
+        // API returns agent_audit_trail
+        const trail = data.agent_audit_trail || data.audit_trail || [];
+        if (trail.length) {
+          addTL("Agent steps", trail.map((e) => e.tool).join(" → "), "ok");
+        }
+
+        setCard("td-step-approve", "td-active");
+        g("td-btn-approve").disabled = false;
+        g("td-btn-reject").disabled = false;
+        showJSON(data);
+      } else {
+        btn.disabled = false;
+        updateTL(idx, "err", data.error || data.detail || `HTTP ${status}`);
+        setCard("td-step-assess", "td-active");
+        setStatus("td-status-assess", "Error", "err");
+        showJSON(data);
+      }
+    });
+
+    // ── Step 3: Approve / Reject ──────────────────
+    async function doDecide(decision) {
+      const approveBtn = g("td-btn-approve"),
+        rejectBtn = g("td-btn-reject");
+      approveBtn.disabled = true;
+      rejectBtn.disabled = true;
+      setStatus("td-status-approve", "Deciding…");
+
+      if (!td.approvalId) {
+        const det = await api(
+          `/api/triage/encounters/${td.encounterId}/`,
+          "GET",
+        );
+        td.approvalId = det.data.pending_approval_id || null;
+      }
+      if (!td.approvalId) {
+        addTL(
+          "Approval",
+          "No pending approval ID found — run assessment first.",
+          "err",
+        );
+        setStatus("td-status-approve", "Error", "err");
+        approveBtn.disabled = false;
+        rejectBtn.disabled = false;
+        return;
+      }
+
+      const comments = g("td-comments").value.trim();
+      const idx = addTL(
+        `POST /api/triage/approvals/${td.approvalId.slice(0, 8)}…/decide/`,
+        `Decision: <strong>${decision}</strong>`,
+        "loading",
+      );
+      const clinicalRole =
+        "{{ request.user.clinical_role.role|default:'NURSE'|escapejs }}";
+      const { ok, status, data } = await api(
+        `/api/triage/approvals/${td.approvalId}/decide/`,
+        "POST",
+        {
+          decision,
+          comments,
+          clinical_role: clinicalRole,
+        },
+      );
+
+      if (ok) {
+        updateTL(
+          idx,
+          "ok",
+          `Status: ${data.status} · role: ${data.clinician_role || "—"}`,
+        );
+        setCard("td-step-approve", "td-done");
+        setStatus("td-status-approve", `✓ ${decision}`, "ok");
+        if (decision === "APPROVED")
+          setPriority(data.confirmed_priority || data.proposed_priority, true);
+        setCard("td-step-reassess", "td-active");
+        g("td-btn-reassess").disabled = false;
+        showJSON(data);
+      } else {
+        updateTL(idx, "err", data.error || data.detail || `HTTP ${status}`);
+        setStatus("td-status-approve", "Error", "err");
+        approveBtn.disabled = false;
+        rejectBtn.disabled = false;
+        showJSON(data);
+      }
+    }
+    g("td-btn-approve").addEventListener("click", () => doDecide("APPROVED"));
+    g("td-btn-reject").addEventListener("click", () => doDecide("REJECTED"));
+
+    // ── Step 4: Reassess ──────────────────────────
+    g("td-btn-reassess").addEventListener("click", async () => {
+      if (!td.encounterId) return;
+      const btn = g("td-btn-reassess");
+      btn.disabled = true;
+      btn.textContent = "Flagging…";
+      const reason =
+        g("td-reassess-reason").value.trim() || "Condition change observed";
+      const newSymptoms = g("td-new-symptoms")
+        .value.split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const idx = addTL(
+        `POST /api/triage/encounters/${td.encounterId.slice(0, 8)}…/reassess/`,
+        `Reason: "${reason}"`,
+        "loading",
+      );
+      const { ok, status, data } = await api(
+        `/api/triage/encounters/${td.encounterId}/reassess/`,
+        "POST",
+        { reason, new_symptoms: newSymptoms, new_vitals: {} },
+      );
+      btn.disabled = false;
+      btn.textContent = "⚑ Flag Reassessment";
+      if (ok) {
+        updateTL(
+          idx,
+          "ok",
+          `flag_id: ${(data.flag_id || "—").slice(0, 8)}… · queue_unchanged: ${data.queue_unchanged}`,
+        );
+        setCard("td-step-reassess", "td-done");
+        setStatus("td-status-reassess", "✓ Flagged", "ok");
+        showJSON(data);
+      } else {
+        updateTL(idx, "err", data.error || data.detail || `HTTP ${status}`);
+        setStatus("td-status-reassess", "Error", "err");
+        showJSON(data);
+      }
+    });
+
+    // ── Reset ─────────────────────────────────────
+    g("td-btn-reset").addEventListener("click", () => {
+      td.encounterId = null;
+      td.approvalId = null;
+      tlItems = [];
+      renderTL();
+      g("td-priority-display").hidden = true;
+      g("td-json-panel").hidden = true;
+      g("td-empty").hidden = false;
+      [
+        ["td-step-encounter", "td-active"],
+        ["td-step-assess", "td-dimmed"],
+        ["td-step-approve", "td-dimmed"],
+        ["td-step-reassess", "td-dimmed"],
+      ].forEach(([id, cls]) => setCard(id, cls));
+      [
+        "td-status-encounter",
+        "td-status-assess",
+        "td-status-approve",
+        "td-status-reassess",
+      ].forEach((id) => setStatus(id, ""));
+      [
+        "td-btn-assess",
+        "td-btn-approve",
+        "td-btn-reject",
+        "td-btn-reassess",
+      ].forEach((id) => {
+        const el = g(id);
+        if (el) el.disabled = true;
+      });
+    });
+    g("td-btn-reset").click();
+
+    // ── Copy JSON ─────────────────────────────────
+    g("td-btn-copy-json").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(g("td-json-code").textContent);
+      } catch {}
+    });
+  })();
+</script>
+
 {% endblock %}

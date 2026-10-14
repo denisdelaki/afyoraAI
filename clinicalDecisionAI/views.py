@@ -40,6 +40,7 @@ from clinicalDecisionAI.services import (
 	select_groq_model,
 	assess_vital_triage,
 )
+from clinicalDecisionAI.triage.models import ClinicalRole
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +159,11 @@ def integration_guide(request):
 @login_required
 @require_http_methods(['GET', 'POST'])
 def clinical_sandbox(request):
+	if settings.DEBUG:
+		ClinicalRole.objects.get_or_create(
+			user=request.user,
+			defaults={'role': ClinicalRole.NURSE},
+		)
 	demo_request = {
 		'age': 47,
 		'sex': 'female',

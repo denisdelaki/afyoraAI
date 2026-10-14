@@ -1,5 +1,6 @@
-{% extends "clinicalDecisionAI/base.html" %} {% block title %}API integration
-guide | Afyora Clinical AI{% endblock %} {% block content %}
+{% extends "clinicalDecisionAI/base.html" %}
+{% block title %}API integration guide | Afyora Clinical AI{% endblock %}
+{% block content %}
 <p class="muted">DEVELOPER CONSOLE / INTEGRATION GUIDE</p>
 <h1>Connect your application</h1>
 <p class="intro">
@@ -16,62 +17,18 @@ guide | Afyora Clinical AI{% endblock %} {% block content %}
 </div>
 
 <div class="language-tabs" role="tablist" aria-label="Programming language">
-  <button
-    id="tab-python"
-    type="button"
-    role="tab"
-    aria-selected="true"
-    aria-controls="panel-python"
-    tabindex="0"
-  >
-    Python
-  </button>
-  <button
-    id="tab-node"
-    type="button"
-    role="tab"
-    aria-selected="false"
-    aria-controls="panel-node"
-    tabindex="-1"
-  >
-    Node.js
-  </button>
-  <button
-    id="tab-java"
-    type="button"
-    role="tab"
-    aria-selected="false"
-    aria-controls="panel-java"
-    tabindex="-1"
-  >
-    Java
-  </button>
-  <button
-    id="tab-go"
-    type="button"
-    role="tab"
-    aria-selected="false"
-    aria-controls="panel-go"
-    tabindex="-1"
-  >
-    Go
-  </button>
+  <button id="tab-python" type="button" role="tab" aria-selected="true"  aria-controls="panel-python" tabindex="0">Python</button>
+  <button id="tab-node"   type="button" role="tab" aria-selected="false" aria-controls="panel-node"   tabindex="-1">Node.js</button>
+  <button id="tab-java"   type="button" role="tab" aria-selected="false" aria-controls="panel-java"   tabindex="-1">Java</button>
+  <button id="tab-go"     type="button" role="tab" aria-selected="false" aria-controls="panel-go"     tabindex="-1">Go</button>
 </div>
 
-<section
-  id="panel-python"
-  class="code-panel"
-  role="tabpanel"
-  aria-labelledby="tab-python"
->
+<section id="panel-python" class="code-panel" role="tabpanel" aria-labelledby="tab-python">
   <div class="code-toolbar">
     <h2>Python</h2>
     <button type="button" data-copy="code-python">Copy code</button>
   </div>
-  <p class="muted">
-    Requires Python 3 and <code>requests</code>. Set
-    <code>CLINICAL_AI_BASE_URL</code> for your deployment.
-  </p>
+  <p class="muted">Requires Python 3 and <code>requests</code>. Set <code>CLINICAL_AI_BASE_URL</code> for your deployment.</p>
   <pre><code id="code-python">import os
 import requests
 
@@ -88,21 +45,12 @@ analysis = response.json()
 print(analysis["supported_diagnosis"])</code></pre>
 </section>
 
-<section
-  id="panel-node"
-  class="code-panel"
-  role="tabpanel"
-  aria-labelledby="tab-node"
-  hidden
->
+<section id="panel-node" class="code-panel" role="tabpanel" aria-labelledby="tab-node" hidden>
   <div class="code-toolbar">
     <h2>Node.js</h2>
     <button type="button" data-copy="code-node">Copy code</button>
   </div>
-  <p class="muted">
-    Requires Node.js 18 or later. Use built-in <code>fetch</code> from a server
-    process.
-  </p>
+  <p class="muted">Requires Node.js 18 or later. Use built-in <code>fetch</code> from a server process.</p>
   <pre><code id="code-node">const baseUrl = process.env.CLINICAL_AI_BASE_URL ?? "http://127.0.0.1:8001";
 const token = process.env.CLINICAL_AI_TOKEN;
 if (!token) throw new Error("CLINICAL_AI_TOKEN is not configured");
@@ -124,20 +72,12 @@ if (!response.ok) throw new Error(`API ${response.status}: ${JSON.stringify(resu
 console.log(result.supported_diagnosis);</code></pre>
 </section>
 
-<section
-  id="panel-java"
-  class="code-panel"
-  role="tabpanel"
-  aria-labelledby="tab-java"
-  hidden
->
+<section id="panel-java" class="code-panel" role="tabpanel" aria-labelledby="tab-java" hidden>
   <div class="code-toolbar">
     <h2>Java</h2>
     <button type="button" data-copy="code-java">Copy code</button>
   </div>
-  <p class="muted">
-    Requires Java 17 or later and uses the built-in <code>HttpClient</code>.
-  </p>
+  <p class="muted">Requires Java 17 or later and uses the built-in <code>HttpClient</code>.</p>
   <pre><code id="code-java">import java.net.URI;
 import java.net.http.*;
 import java.time.Duration;
@@ -170,13 +110,7 @@ public class ClinicalAiExample {
 }</code></pre>
 </section>
 
-<section
-  id="panel-go"
-  class="code-panel"
-  role="tabpanel"
-  aria-labelledby="tab-go"
-  hidden
->
+<section id="panel-go" class="code-panel" role="tabpanel" aria-labelledby="tab-go" hidden>
   <div class="code-toolbar">
     <h2>Go</h2>
     <button type="button" data-copy="code-go">Copy code</button>
@@ -227,50 +161,572 @@ func main() {
 </div>
 <p><a href="{% url 'integration-dashboard' %}">Back to integrations</a></p>
 
-<script>
-  const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
-  const panels = tabs.map((tab) =>
-    document.getElementById(tab.getAttribute("aria-controls")),
-  );
 
-  function selectTab(selectedIndex, focus = false) {
-    tabs.forEach((tab, index) => {
-      const selected = index === selectedIndex;
-      tab.setAttribute("aria-selected", String(selected));
-      tab.tabIndex = selected ? 0 : -1;
-      panels[index].hidden = !selected;
-    });
-    if (focus) tabs[selectedIndex].focus();
+<!-- ══════════════════════════════════════════════════════════════════════
+     THE TRIAGE DESK — Integration Reference
+     ══════════════════════════════════════════════════════════════════════ -->
+
+<hr style="margin: 56px 0 40px; border: 0; border-top: 2px solid var(--line);" />
+
+<p class="muted">DEVELOPER CONSOLE / THE TRIAGE DESK</p>
+<h1>The Triage Desk — Integration Reference</h1>
+<p class="intro">
+  The Triage Desk exposes a REST API for the complete SATS triage workflow —
+  encounter registration, multi-step agentic assessment, clinician approval gate,
+  and reassessment flagging. Integrate this into any EHR, EMR, or clinical
+  information system.
+</p>
+
+<div class="guide-note">
+  <strong>Authentication:</strong> all triage endpoints require an authenticated session
+  (<code>Cookie: sessionid=…</code>) <em>or</em> an integration bearer token
+  (<code>Authorization: Bearer &lt;token&gt;</code>). Approval endpoints additionally
+  require the authenticated user to have a <code>ClinicalRole</code> of
+  <code>NURSE</code> or <code>DOCTOR</code>.
+</div>
+
+<!-- ── Endpoint reference ── -->
+<section class="section">
+  <h2>Endpoint overview</h2>
+  <table class="triage-endpoint-table">
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Description</th><th>Role required</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>POST</code></td><td><code>/api/triage/encounters/</code></td><td>Register a triage encounter</td><td>Any authenticated user</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/triage/encounters/{id}/</code></td><td>Encounter detail + workflow status</td><td>Any authenticated user</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/triage/encounters/{id}/assess/</code></td><td>Run LangGraph triage agent</td><td>Any authenticated user</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/triage/encounters/{id}/reassess/</code></td><td>Flag for reassessment</td><td>Any authenticated user</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/triage/encounters/{id}/audit/</code></td><td>Full immutable audit trail</td><td>NURSE or DOCTOR</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/triage/approvals/{id}/decide/</code></td><td>Approve or reject a proposal</td><td>NURSE or DOCTOR</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── Workflow overview ── -->
+<section class="section">
+  <h2>Workflow</h2>
+  <ol class="triage-workflow-ol">
+    <li>
+      <strong>Register encounter</strong> — <code>POST /api/triage/encounters/</code><br>
+      <span class="muted">Creates the patient encounter. Returns <code>encounter_id</code>.</span>
+    </li>
+    <li>
+      <strong>Run assessment</strong> — <code>POST /api/triage/encounters/{id}/assess/</code><br>
+      <span class="muted">LangGraph agent runs: vitals validation → deterministic SATS rules → AI advisory → priority proposal. Returns <code>proposed_priority</code> and <code>approval_id</code>.</span>
+    </li>
+    <li>
+      <strong>Clinician approval</strong> — <code>POST /api/triage/approvals/{id}/decide/</code><br>
+      <span class="muted">A nurse or doctor approves or rejects the proposal. Only on APPROVED does <code>confirmed_priority</code> reach the queue.</span>
+    </li>
+    <li>
+      <strong>Reassessment (optional)</strong> — <code>POST /api/triage/encounters/{id}/reassess/</code><br>
+      <span class="muted">Flag new observations without moving the patient's queue position. Invalidates any pending approval.</span>
+    </li>
+  </ol>
+</section>
+
+<!-- ── Code examples ── -->
+<h2 style="margin-top:0;">Code examples</h2>
+
+<div class="language-tabs" role="tablist" aria-label="Triage API language">
+  <button id="ttab-python" type="button" role="tab" aria-selected="true"  aria-controls="tpanel-python" tabindex="0">Python</button>
+  <button id="ttab-node"   type="button" role="tab" aria-selected="false" aria-controls="tpanel-node"   tabindex="-1">Node.js</button>
+  <button id="ttab-curl"   type="button" role="tab" aria-selected="false" aria-controls="tpanel-curl"   tabindex="-1">cURL</button>
+  <button id="ttab-go"     type="button" role="tab" aria-selected="false" aria-controls="tpanel-go"     tabindex="-1">Go</button>
+</div>
+
+<!-- Python -->
+<section id="tpanel-python" class="code-panel" role="tabpanel" aria-labelledby="ttab-python">
+  <div class="code-toolbar">
+    <h2>Python — full triage workflow</h2>
+    <button type="button" data-copy="tcode-python">Copy code</button>
+  </div>
+  <p class="muted">Requires <code>requests</code>. Set <code>TRIAGE_BASE_URL</code> and <code>CLINICAL_AI_TOKEN</code>.</p>
+  <pre><code id="tcode-python">import os, time
+import requests
+
+BASE = os.getenv("TRIAGE_BASE_URL", "http://127.0.0.1:8001")
+TOKEN = os.environ["CLINICAL_AI_TOKEN"]
+HEADERS = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+
+# ── 1. Register encounter ────────────────────────────────────────────────
+enc = requests.post(f"{BASE}/api/triage/encounters/", headers=HEADERS, json={
+    "age": 52,
+    "is_pregnant": False,
+    "symptoms": ["chest pain", "shortness of breath"],
+    "vitals": {
+        "heart_rate": 135,
+        "respiratory_rate": 26,
+        "oxygen_saturation": 91,
+        "blood_pressure": "110/70",
+        "temperature": 38.8,
+    },
+}, timeout=30)
+enc.raise_for_status()
+encounter_id = enc.json()["encounter_id"]
+print(f"Encounter: {encounter_id}")
+
+# ── 2. Run triage assessment ─────────────────────────────────────────────
+assess = requests.post(
+    f"{BASE}/api/triage/encounters/{encounter_id}/assess/",
+    headers=HEADERS, json={}, timeout=60,
+)
+assess.raise_for_status()
+result = assess.json()
+priority    = result["proposed_priority"]   # RED | ORANGE | YELLOW | GREEN | NOT_ASSESSED
+approval_id = result["approval_id"]
+escalation  = result["immediate_escalation"]
+print(f"Priority: {priority}  |  Immediate escalation: {escalation}")
+print(f"Recommendation: {result['recommendation']}")
+
+# If RED / immediate escalation — act NOW before software steps
+if escalation:
+    print("⚠ IMMEDIATE EMERGENCY — activate clinical emergency protocol NOW")
+
+# ── 3. Clinician approval ────────────────────────────────────────────────
+# Must be called with credentials of a user who has ClinicalRole NURSE or DOCTOR
+decision = requests.post(
+    f"{BASE}/api/triage/approvals/{approval_id}/decide/",
+    headers=HEADERS, json={
+        "decision": "APPROVED",
+        "comments": "Assessed at bedside — priority confirmed.",
+    }, timeout=30,
+)
+decision.raise_for_status()
+print(f"Approval: {decision.json()['status']}")
+print(f"Confirmed priority: {decision.json()['confirmed_priority']}")
+
+# ── 4. Optional: flag reassessment ──────────────────────────────────────
+flag = requests.post(
+    f"{BASE}/api/triage/encounters/{encounter_id}/reassess/",
+    headers=HEADERS, json={
+        "reason": "Patient reports worsening dyspnoea",
+        "new_symptoms": ["worsening dyspnoea"],
+        "new_vitals": {"oxygen_saturation": 88},
+    }, timeout=30,
+)
+flag.raise_for_status()
+print(f"Reassessment flag: {flag.json()['flag_id']}  |  queue_unchanged: {flag.json()['queue_unchanged']}")
+</code></pre>
+</section>
+
+<!-- Node.js -->
+<section id="tpanel-node" class="code-panel" role="tabpanel" aria-labelledby="ttab-node" hidden>
+  <div class="code-toolbar">
+    <h2>Node.js — full triage workflow</h2>
+    <button type="button" data-copy="tcode-node">Copy code</button>
+  </div>
+  <p class="muted">Node.js 18+ with built-in <code>fetch</code>. Run from a server process.</p>
+  <pre><code id="tcode-node">const BASE  = process.env.TRIAGE_BASE_URL ?? "http://127.0.0.1:8001";
+const TOKEN = process.env.CLINICAL_AI_TOKEN;
+if (!TOKEN) throw new Error("CLINICAL_AI_TOKEN not set");
+
+const HEADERS = {
+  Authorization: `Bearer ${TOKEN}`,
+  "Content-Type": "application/json",
+};
+
+async function triageFetch(path, body) {
+  const r = await fetch(`${BASE}${path}`, {
+    method: body ? "POST" : "GET",
+    headers: HEADERS,
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(60_000),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(`${r.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+// 1. Register encounter
+const { encounter_id } = await triageFetch("/api/triage/encounters/", {
+  age: 52,
+  is_pregnant: false,
+  symptoms: ["chest pain", "shortness of breath"],
+  vitals: { heart_rate: 135, respiratory_rate: 26, oxygen_saturation: 91 },
+});
+console.log("Encounter:", encounter_id);
+
+// 2. Run assessment
+const result = await triageFetch(`/api/triage/encounters/${encounter_id}/assess/`, {});
+console.log("Priority:", result.proposed_priority, "| Escalation:", result.immediate_escalation);
+if (result.immediate_escalation) console.error("⚠ IMMEDIATE EMERGENCY");
+
+// 3. Clinician approval (requires NURSE or DOCTOR role)
+const approval = await triageFetch(`/api/triage/approvals/${result.approval_id}/decide/`, {
+  decision: "APPROVED",
+  comments: "Assessed at bedside — priority confirmed.",
+});
+console.log("Confirmed priority:", approval.confirmed_priority);
+
+// 4. Optional: flag reassessment
+const flag = await triageFetch(`/api/triage/encounters/${encounter_id}/reassess/`, {
+  reason: "Patient reports worsening dyspnoea",
+  new_symptoms: ["worsening dyspnoea"],
+  new_vitals: { oxygen_saturation: 88 },
+});
+console.log("Reassessment flag:", flag.flag_id, "| queue_unchanged:", flag.queue_unchanged);
+</code></pre>
+</section>
+
+<!-- cURL -->
+<section id="tpanel-curl" class="code-panel" role="tabpanel" aria-labelledby="ttab-curl" hidden>
+  <div class="code-toolbar">
+    <h2>cURL — step by step</h2>
+    <button type="button" data-copy="tcode-curl">Copy code</button>
+  </div>
+  <p class="muted">Replace <code>$TOKEN</code> and <code>$BASE</code> with your values.</p>
+  <pre><code id="tcode-curl">export BASE="http://127.0.0.1:8001"
+export TOKEN="your-integration-token"
+
+# ── 1. Register encounter ────────────────────────────────────────────────
+ENC=$(curl -s -X POST "$BASE/api/triage/encounters/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "age": 52,
+    "is_pregnant": false,
+    "symptoms": ["chest pain", "shortness of breath"],
+    "vitals": {"heart_rate": 135, "respiratory_rate": 26, "oxygen_saturation": 91}
+  }')
+echo "$ENC" | python3 -m json.tool
+ENCOUNTER_ID=$(echo "$ENC" | python3 -c "import sys,json; print(json.load(sys.stdin)['encounter_id'])")
+
+# ── 2. Run assessment ────────────────────────────────────────────────────
+ASSESS=$(curl -s -X POST "$BASE/api/triage/encounters/$ENCOUNTER_ID/assess/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}')
+echo "$ASSESS" | python3 -m json.tool
+APPROVAL_ID=$(echo "$ASSESS" | python3 -c "import sys,json; print(json.load(sys.stdin)['approval_id'])")
+
+# ── 3. Clinician approval (NURSE or DOCTOR role required) ─────────────────
+curl -s -X POST "$BASE/api/triage/approvals/$APPROVAL_ID/decide/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"decision": "APPROVED", "comments": "Bedside review — priority confirmed."}' \
+  | python3 -m json.tool
+
+# ── 4. Flag reassessment (optional) ─────────────────────────────────────
+curl -s -X POST "$BASE/api/triage/encounters/$ENCOUNTER_ID/reassess/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "Worsening dyspnoea", "new_symptoms": ["worsening dyspnoea"], "new_vitals": {}}' \
+  | python3 -m json.tool
+</code></pre>
+</section>
+
+<!-- Go -->
+<section id="tpanel-go" class="code-panel" role="tabpanel" aria-labelledby="ttab-go" hidden>
+  <div class="code-toolbar">
+    <h2>Go — full triage workflow</h2>
+    <button type="button" data-copy="tcode-go">Copy code</button>
+  </div>
+  <p class="muted">Uses Go's standard library. Set <code>TRIAGE_BASE_URL</code> and <code>CLINICAL_AI_TOKEN</code>.</p>
+  <pre><code id="tcode-go">package main
+
+import (
+    "bytes"; "encoding/json"; "fmt"; "io"; "net/http"; "os"; "time"
+)
+
+var (
+    base   = envOr("TRIAGE_BASE_URL", "http://127.0.0.1:8001")
+    token  = os.Getenv("CLINICAL_AI_TOKEN")
+    client = &amp;http.Client{Timeout: 60 * time.Second}
+)
+
+func triagePost(path string, body any) map[string]any {
+    b, _ := json.Marshal(body)
+    req, _ := http.NewRequest("POST", base+path, bytes.NewReader(b))
+    req.Header.Set("Authorization", "Bearer "+token)
+    req.Header.Set("Content-Type", "application/json")
+    resp, err := client.Do(req)
+    if err != nil { panic(err) }
+    defer resp.Body.Close()
+    raw, _ := io.ReadAll(resp.Body)
+    var result map[string]any
+    json.Unmarshal(raw, &amp;result)
+    return result
+}
+
+func envOr(key, def string) string {
+    if v := os.Getenv(key); v != "" { return v }; return def
+}
+
+func main() {
+    // 1. Register encounter
+    enc := triagePost("/api/triage/encounters/", map[string]any{
+        "age": 52, "is_pregnant": false,
+        "symptoms": []string{"chest pain", "shortness of breath"},
+        "vitals":   map[string]any{"heart_rate": 135, "oxygen_saturation": 91},
+    })
+    encounterID := enc["encounter_id"].(string)
+    fmt.Println("Encounter:", encounterID)
+
+    // 2. Run assessment
+    result := triagePost("/api/triage/encounters/"+encounterID+"/assess/", map[string]any{})
+    fmt.Println("Priority:", result["proposed_priority"], "| Escalation:", result["immediate_escalation"])
+
+    // 3. Clinician approval
+    approvalID := result["approval_id"].(string)
+    approval := triagePost("/api/triage/approvals/"+approvalID+"/decide/", map[string]any{
+        "decision": "APPROVED", "comments": "Bedside review — confirmed.",
+    })
+    fmt.Println("Confirmed priority:", approval["confirmed_priority"])
+}
+</code></pre>
+</section>
+
+<p id="tcopy-status" class="muted" aria-live="polite"></p>
+
+<!-- ── Request / Response schemas ── -->
+<section class="section">
+  <h2>Request schemas</h2>
+
+  <h3 style="margin-top:20px;font-size:16px;">POST /api/triage/encounters/</h3>
+  <pre><code>{
+  "age":         52,              // integer 0–130, optional
+  "is_pregnant": false,           // boolean, optional
+  "symptoms":    ["chest pain"],  // string[], required, min 1
+  "vitals": {
+    "heart_rate":        135,     // bpm, integer
+    "respiratory_rate":  26,      // breaths/min, integer
+    "oxygen_saturation": 91,      // %, integer 0–100
+    "blood_pressure":    "110/70",// "SBP/DBP" string or integer SBP
+    "temperature":       38.8     // °C, float
+  },
+  "medical_history": [],          // string[], optional
+  "encounter_ref":   "YOUR-REF"  // your system's reference ID, optional
+}</code></pre>
+
+  <h3 style="margin-top:24px;font-size:16px;">POST /api/triage/approvals/{id}/decide/</h3>
+  <pre><code>{
+  "decision":        "APPROVED",              // "APPROVED" | "REJECTED", required
+  "comments":        "Bedside review — OK.", // string, optional
+  "idempotency_key": "unique-key-abc"        // string, optional — prevents replays
+}</code></pre>
+
+  <h3 style="margin-top:24px;font-size:16px;">POST /api/triage/encounters/{id}/reassess/</h3>
+  <pre><code>{
+  "reason":       "Worsening dyspnoea",       // string, required
+  "new_symptoms": ["worsening dyspnoea"],     // string[], optional
+  "new_vitals":   {"oxygen_saturation": 88}  // object, optional
+}</code></pre>
+</section>
+
+<section class="section">
+  <h2>Response schemas</h2>
+
+  <h3 style="margin-top:20px;font-size:16px;">Assessment response (POST …/assess/)</h3>
+  <pre><code>{
+  "encounter_id":         "uuid",
+  "assessment_id":        "uuid",
+  "proposed_priority":    "ORANGE",    // RED | ORANGE | YELLOW | GREEN | NOT_ASSESSED
+  "immediate_escalation": false,       // true = act NOW, do not wait
+  "recommendation":       "Very urgent — see patient within 10 minutes.",
+  "framework_source":     "EMSSA 2012 / Gottschalk et al.",
+  "triggered_criteria": [
+    {
+      "criterion_id":    "SATS-HR-TACHYCARDIA",
+      "vital_sign":      "heart_rate",
+      "measured_value":  135,
+      "threshold_value": 129,
+      "direction":       "above",
+      "priority":        "ORANGE",
+      "source":          "EMSSA 2012"
+    }
+  ],
+  "unassessed_vitals":     [],
+  "missing_data_warnings": [],
+  "llm_summary":           "Advisory: …",
+  "requires_approval":     true,
+  "approval_id":           "uuid",      // use this in /decide/
+  "audit_trail": [
+    {"tool": "validate_vitals",       "success": true},
+    {"tool": "assess_triage_priority","success": true},
+    {"tool": "llm_summarise",         "success": true},
+    {"tool": "propose_priority",      "success": true},
+    {"tool": "await_approval",        "success": true}
+  ],
+  "workflow_step": "await_approval",
+  "assessment_timestamp": "2026-10-13T14:00:00Z"
+}</code></pre>
+
+  <h3 style="margin-top:24px;font-size:16px;">Approval response (POST …/decide/)</h3>
+  <pre><code>{
+  "approval_id":       "uuid",
+  "status":            "APPROVED",      // APPROVED | REJECTED
+  "decision":          "APPROVED",
+  "clinician_role":    "NURSE",
+  "decided_at":        "2026-10-13T14:05:00Z",
+  "confirmed_priority":"ORANGE",        // populated on APPROVED only
+  "proposed_priority": "ORANGE",
+  "encounter_id":      "uuid"
+}</code></pre>
+</section>
+
+<!-- ── Priority levels ── -->
+<section class="section">
+  <h2>SATS priority levels</h2>
+  <table class="triage-endpoint-table">
+    <thead>
+      <tr><th>Code</th><th>Level</th><th>SATS category</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="tpri red">RED</span></td><td>Immediate</td><td>P1</td><td>Resuscitation — within seconds</td></tr>
+      <tr><td><span class="tpri orange">ORANGE</span></td><td>Very urgent</td><td>P2</td><td>Within 10 minutes</td></tr>
+      <tr><td><span class="tpri yellow">YELLOW</span></td><td>Urgent</td><td>P3</td><td>Within 60 minutes</td></tr>
+      <tr><td><span class="tpri green">GREEN</span></td><td>Standard</td><td>P4</td><td>Within 240 minutes</td></tr>
+      <tr><td><span class="tpri na">NOT_ASSESSED</span></td><td>—</td><td>—</td><td>Insufficient vitals to assess; escalate manually</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── Safety notes ── -->
+<section class="section">
+  <h2>Integration safety requirements</h2>
+  <ul class="result-list">
+    <li><strong>Never auto-approve.</strong> The <code>/decide/</code> endpoint must be called by a human with a <code>NURSE</code> or <code>DOCTOR</code> clinical role. Automated callers will receive <code>401 Unauthorized</code>.</li>
+    <li><strong>Treat RED immediately.</strong> When <code>immediate_escalation: true</code>, surface the recommendation to clinical staff immediately — do not wait for the software approval step.</li>
+    <li><strong>No PII in encounter payloads.</strong> The API stores no name, MRN, national ID, or date of birth. Use your own system's reference ID in <code>encounter_ref</code> to correlate records.</li>
+    <li><strong>Store tokens server-side.</strong> Never send integration tokens to browsers or mobile clients.</li>
+    <li><strong>Idempotency keys.</strong> Supply a unique <code>idempotency_key</code> on each approval request to prevent duplicate submissions from retries.</li>
+    <li><strong>Audit trail.</strong> Every action generates an immutable <code>AuditEvent</code>. Fetch the full trail at <code>GET /api/triage/encounters/{id}/audit/</code> (NURSE/DOCTOR role required).</li>
+  </ul>
+</section>
+
+<p><a href="{% url 'integration-dashboard' %}">Back to integrations</a></p>
+
+<!-- ── Styles scoped to triage guide section ── -->
+<style>
+  .triage-endpoint-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  .triage-endpoint-table th {
+    padding: 8px 10px;
+    text-align: left;
+    background: var(--paper);
+    border-bottom: 2px solid var(--line);
+    font-weight: 650;
+  }
+  .triage-endpoint-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .triage-endpoint-table tr:last-child td { border-bottom: 0; }
+  .triage-endpoint-table code {
+    font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 
-  tabs.forEach((tab, index) => {
-    tab.addEventListener("click", () => selectTab(index));
-    tab.addEventListener("keydown", (event) => {
-      let nextIndex = index;
-      if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
-      if (event.key === "ArrowLeft")
-        nextIndex = (index - 1 + tabs.length) % tabs.length;
-      if (event.key === "Home") nextIndex = 0;
-      if (event.key === "End") nextIndex = tabs.length - 1;
-      if (nextIndex !== index) {
-        event.preventDefault();
-        selectTab(nextIndex, true);
-      }
-    });
-  });
+  .triage-workflow-ol {
+    margin: 12px 0;
+    padding-left: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .triage-workflow-ol li { line-height: 1.6; }
 
-  document.querySelectorAll("[data-copy]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const code = document.getElementById(button.dataset.copy).textContent;
-      const status = document.getElementById("copy-status");
-      try {
-        await navigator.clipboard.writeText(code);
-        status.textContent = "Code copied.";
-      } catch {
-        status.textContent =
-          "Copy unavailable. Select the code block to copy it manually.";
-      }
+  .tpri {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .tpri.red    { background: #fce8e6; color: #8c1c1c; }
+  .tpri.orange { background: #fff0e0; color: #7a4210; }
+  .tpri.yellow { background: #fffde6; color: #6d5b00; }
+  .tpri.green  { background: #e6f4ec; color: #155c3a; }
+  .tpri.na     { background: #eef0f2; color: #5a6672; }
+</style>
+
+<script>
+  // ── Original API guide tabs ──────────────────────────────────────────────
+  (function () {
+    const tabs   = Array.from(document.querySelectorAll('[role="tab"]:not([id^="ttab-"])'));
+    const panels = tabs.map(t => document.getElementById(t.getAttribute("aria-controls")));
+
+    function selectTab(i, focus) {
+      tabs.forEach((t, idx) => {
+        const sel = idx === i;
+        t.setAttribute("aria-selected", String(sel));
+        t.tabIndex = sel ? 0 : -1;
+        panels[idx].hidden = !sel;
+      });
+      if (focus) tabs[i].focus();
+    }
+
+    tabs.forEach((tab, i) => {
+      tab.addEventListener("click", () => selectTab(i));
+      tab.addEventListener("keydown", e => {
+        let next = i;
+        if (e.key === "ArrowRight") next = (i + 1) % tabs.length;
+        if (e.key === "ArrowLeft")  next = (i - 1 + tabs.length) % tabs.length;
+        if (e.key === "Home") next = 0;
+        if (e.key === "End")  next = tabs.length - 1;
+        if (next !== i) { e.preventDefault(); selectTab(next, true); }
+      });
     });
-  });
+
+    document.querySelectorAll("[data-copy]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const code = document.getElementById(btn.dataset.copy).textContent;
+        const st   = document.getElementById("copy-status");
+        try {
+          await navigator.clipboard.writeText(code);
+          st.textContent = "Code copied.";
+        } catch {
+          st.textContent = "Copy unavailable. Select the code block manually.";
+        }
+      });
+    });
+  })();
+
+  // ── Triage API guide tabs ────────────────────────────────────────────────
+  (function () {
+    const tabs   = Array.from(document.querySelectorAll('[id^="ttab-"]'));
+    const panels = tabs.map(t => document.getElementById(t.getAttribute("aria-controls")));
+
+    function selectTab(i, focus) {
+      tabs.forEach((t, idx) => {
+        const sel = idx === i;
+        t.setAttribute("aria-selected", String(sel));
+        t.tabIndex = sel ? 0 : -1;
+        panels[idx].hidden = !sel;
+      });
+      if (focus) tabs[i].focus();
+    }
+
+    tabs.forEach((tab, i) => {
+      tab.addEventListener("click", () => selectTab(i));
+      tab.addEventListener("keydown", e => {
+        let next = i;
+        if (e.key === "ArrowRight") next = (i + 1) % tabs.length;
+        if (e.key === "ArrowLeft")  next = (i - 1 + tabs.length) % tabs.length;
+        if (e.key === "Home") next = 0;
+        if (e.key === "End")  next = tabs.length - 1;
+        if (next !== i) { e.preventDefault(); selectTab(next, true); }
+      });
+    });
+
+    document.querySelectorAll("[data-copy^='tcode-']").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const code = document.getElementById(btn.dataset.copy).textContent;
+        const st   = document.getElementById("tcopy-status");
+        try {
+          await navigator.clipboard.writeText(code);
+          st.textContent = "Code copied.";
+        } catch {
+          st.textContent = "Copy unavailable. Select the code block manually.";
+        }
+      });
+    });
+  })();
 </script>
 {% endblock %}
