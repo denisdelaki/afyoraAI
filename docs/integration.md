@@ -11,6 +11,10 @@ This guide is for backend teams connecting another application to the Afyora Cli
 
 Before connecting a client, sign in and open `/sandbox/` to try the clinical analysis flow with sample JSON. The sandbox calls the configured Groq provider and may consume quota. Use synthetic or approved de-identified inputs only; sandbox analysis is not a substitute for a clinician's review.
 
+For triage sandbox testing with `DEBUG=True`, loading `/sandbox/` assigns `NURSE` to the signed-in user if they have no clinical role. Existing roles are preserved. This assignment is saved in the local database; use a separate development database. Production mode never assigns a testing role.
+
+Triage approval calls to `POST /api/triage/approvals/{approval_id}/decide/` must include `clinical_role` (`NURSE` or `DOCTOR`), `decision` (`APPROVED` or `REJECTED`), and optionally `comments`. The sandbox supplies the role automatically. The role must match the authenticated clinician's server-assigned role; a request field alone cannot grant permissions. This endpoint currently requires a clinician session and a CSRF token, not an application bearer token.
+
 The integration dashboard lists the applications registered to your account and lets you deactivate one. Deactivation immediately prevents that token from authorizing API calls. Accounts cannot view or deactivate integrations owned by another account.
 
 The CLI remains available to Afyora operators who need to provision an integration directly:
