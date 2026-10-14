@@ -28,6 +28,14 @@ from clinicalDecisionAI.views import (
     integration_guide,
     integration_dashboard,
 )
+from clinicalDecisionAI.triage.api_views import (
+    TriageEncounterCreateView,
+    TriageEncounterDetailView,
+    TriageAssessmentView,
+    TriageApprovalDecideView,
+    TriageAuditHistoryView,
+    ReassessmentFlagView,
+)
 
 urlpatterns = [
     path('', application_home, name='home'),
@@ -53,4 +61,12 @@ urlpatterns = [
         name='integration-deactivate',
     ),
     path('api/clinical-ai/analyze/', ClinicalAnalysisAPIView.as_view(), name='clinical-ai-analyze'),
+
+    # Triage workflow API
+    path('api/triage/encounters/', TriageEncounterCreateView.as_view(), name='triage-encounter-create'),
+    path('api/triage/encounters/<uuid:encounter_id>/', TriageEncounterDetailView.as_view(), name='triage-encounter-detail'),
+    path('api/triage/encounters/<uuid:encounter_id>/assess/', TriageAssessmentView.as_view(), name='triage-assess'),
+    path('api/triage/encounters/<uuid:encounter_id>/reassess/', ReassessmentFlagView.as_view(), name='triage-reassess'),
+    path('api/triage/encounters/<uuid:encounter_id>/audit/', TriageAuditHistoryView.as_view(), name='triage-audit'),
+    path('api/triage/approvals/<uuid:approval_id>/decide/', TriageApprovalDecideView.as_view(), name='triage-approval-decide'),
 ]
