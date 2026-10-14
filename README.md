@@ -1,5 +1,139 @@
 # Afyora Clinical Decision AI
 
+## The Triage Desk
+
+The Triage Desk is a clinical decision-support prototype that coordinates adult vital-sign screening, evidence-linked priority proposals, and explicit clinician approval. It supports clinical judgment; it is not an autonomous clinician, a diagnostic system, or a validated patient-queue manager.
+
+## Problem statement
+
+In busy public hospitals, the work between recording symptoms and vital signs and establishing a clinician-confirmed urgency level can become a bottleneck. Checking thresholds, identifying missing observations, documenting decisions, and reassessing changing symptoms compete for nurses' and doctors' time.
+
+The project's motivation includes its creator's experience seeking care in Nairobi's public hospitals, including Kenyatta National Hospital (KNH). The intended use case is support for frontline triage in resource-constrained settings, not a claim that KNH uses this software or that its specific workflows have been studied. Deployment would require collaboration with local clinicians and alignment with Kenyan guidance and facility protocols.
+
+## Solution overview
+
+The system validates supplied observations, applies deterministic screening rules referenced to the South African Triage Scale (SATS), and proposes a priority with triggered criteria and source citations. An optional AI-generated summary accompanies non-emergency findings. Emergency findings bypass summarisation and instruct staff to act immediately, without waiting for software approval.
+
+Missing measurements are not evidence of normality. A qualified clinician reviews each proposal before a confirmed priority is recorded. Reassessment and referral tools produce advisory outputs rather than authorising patient movement or treatment. These prototype rules require independent clinical validation; they do not implement the complete SATS assessment.
+
+## Target users
+
+- Nurses and doctors reviewing triage observations and confirming priorities.
+- Hospital operators reviewing assessment and approval history.
+- EMR/HIS backend teams integrating encounter and assessment APIs.
+- Patients, as intended beneficiaries of more consistent and timely prioritisation; outcome improvements have not yet been demonstrated in clinical deployment.
+
+## Technology stack
+
+| Component                       | Technology                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------------- |
+| Backend and REST APIs           | Python, Django 5.2, Django REST Framework                                        |
+| Agent orchestration             | LangGraph 0.3.34, typed `StateGraph`                                             |
+| MCP client/server               | FastMCP 2.14.5, embedded in-memory transport                                     |
+| Input/output validation         | Pydantic v2                                                                      |
+| Current triage summary provider | Groq SDK/API; configurable `GROQ_MODELS`, default `openai/gpt-oss-120b`          |
+| Optional inference adapter      | Ollama HTTP API, default `llama3.2:3b`; not connected to the triage summary node |
+| Database                        | SQLite by default; PostgreSQL through `DATABASE_URL` and the Render Blueprint    |
+| Deployment                      | Gunicorn, WhiteNoise, Render                                                     |
+| Authentication                  | Django sessions and hashed integration bearer tokens                             |
+
+## Architecture
+
+```mermaid
+flowchart TD
+    Inputs["Data sources: supplied symptoms and vital signs"] --> Caller["Clinician / EMR backend"]
+    Caller --> API["Django REST API"]
+    API --> Agent["Single LangGraph triage agent"]
+    Agent --> Client["FastMCP in-memory client"]
+    Client --> Server["AfyoraTriageDesk MCP server"]
+    Server --> Tools["Validation, assessment, reassessment, referral tools"]
+    Rules["Embedded SATS-referenced thresholds, citations and routing table"] --> Tools
+    Tools --> Client
+    Client --> Agent
+    Agent -->|"Non-emergency summary"| Groq["External Groq API / configured model"]
+    Groq --> Agent
+    Agent --> Proposal["Priority proposal and emergency alerts"]
+    Proposal --> API
+    API --> DB[("SQLite / PostgreSQL: encounters, assessments, approvals, audit")]
+    API --> Review["Human review: nurse or doctor"]
+    Review -->|"Session + CSRF decision request"| Gate["Approval service: role, freshness, expiry and replay checks"]
+    Gate -->|"Confirmed priority only after approval"| DB
+    Ollama["Ollama adapter: not wired into triage agent"]
+    Retrieval["External MCP retrieval / RAG: not implemented"]
+```
+
+The diagram shows application data flow, not a deployed KNH integration. Clinical evidence is embedded configuration, not live retrieval or registered MCP resources. See [ARCHITECTURE.md](ARCHITECTURE.md) for additional design context; the implementation status and limitations below take precedence over aspirational components in that document.
+
+## Agent architecture
+
+One agent follows a predefined graph: `validate_vitals` -> `assess_priority` -> optional `llm_summarise` -> `propose_priority` -> `await_approval`. Conditional edges route assessment errors to an error terminal and immediate emergencies directly to the proposal, skipping the LLM. This is a bounded, tool-using workflow, not an unrestricted planner or multi-agent system.
+
+The graph carries structured in-memory state: inputs, parsed observations, criteria, warnings, recommendations, model-summary metadata, and a workflow audit trail. There is no configured persistent LangGraph checkpointer, conversational memory, or vector database. Django persists clinical workflow records separately. MCP validation and assessment nodes have 15-second deadlines; the overall agent deadline defaults to 60 seconds. The current LLM call is synchronous, so the overall async timeout is not a hard cancellation guarantee for provider execution. Provider timeouts must also be configured. A retry constant exists, but tool retries are not implemented.
+
+Deterministic rules control priority. The current summary node calls the existing Groq analysis service and falls back to the rule recommendation on model failure. It is not yet a dedicated triage-only summary prompt.
+
+## MCP implementation and tools
+
+The custom `AfyoraTriageDesk` FastMCP server exposes four tools with Pydantic input/output schemas. The LangGraph validation and assessment nodes connect using `MCPClient` and parse structured results; no MCP network listener or subprocess is started in this workflow.
+
+| Tool                            | Purpose                                                                                | Current agent connection                     |
+| ------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `validate_vitals`               | Parse observations and check adult eligibility without scoring                         | Called by validation node                    |
+| `assess_triage_priority`        | Return a proposed priority, triggered criteria, citations and emergency recommendation | Called by assessment node                    |
+| `request_clinical_reassessment` | Return reassessment information with `queue_unchanged=True`                            | Exposed tool; not called by assessment graph |
+| `prepare_department_referral`   | Propose a department using an embedded facility routing table                          | Exposed tool; not called by assessment graph |
+
+The tool functions return advisory outputs; persistent flags, approval records, and API-level audit records are responsibilities of the Django layer. The server's tool logging is not itself a database-backed audit record for every invocation. Thresholds, citations, and routing rules are embedded Python data, not registered MCP resources. No external MCP server, `mcp-server-fetch` connection, or RAG data source is currently implemented. Groq and the optional Ollama adapter use their provider APIs directly, not MCP.
+
+The separate `/api/clinical-ai/analyze/` endpoint uses an embedded context-preparation MCP tool and the older clinical-analysis response contract described below. It is not the LangGraph triage workflow.
+
+## Human-in-the-loop workflow
+
+1. Register an encounter with synthetic or approved de-identified observations.
+2. Run the agent to create an assessment and pending approval request. Proposed and confirmed priorities remain separate.
+3. Surface emergency recommendations immediately. Clinical action must not wait for an approval click.
+4. An authenticated clinician with a server-assigned `NURSE` or `DOCTOR` role approves or rejects the exact proposal.
+5. Approval records the confirmed priority on the encounter; rejection does not apply a new confirmed priority. Decisions are audited. This does not directly control an external hospital queue.
+
+The approval service checks roles, clinical-input freshness, expiry, and duplicate submissions, and uses a transaction with an approval-row lock for committing decisions. See limitations below for remaining concurrency validation needs.
+
+## Triage usage instructions
+
+After completing backend setup, run `python manage.py runserver` and sign in at `/accounts/login/`. Use `/sandbox/` with synthetic data to exercise the workflow. In `DEBUG=True`, opening the sandbox assigns a persisted `NURSE` role only to users with no existing role; use a separate development database. Production does not assign testing roles. Production clinical roles must be provisioned by authorised operators.
+
+For backend integration, create an application token as described below, export it as `CLINICAL_AI_TOKEN`, and register a synthetic encounter:
+
+```sh
+curl -X POST http://127.0.0.1:8000/api/triage/encounters/ \
+  -H "Authorization: Bearer $CLINICAL_AI_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"encounter_ref":"synthetic-demo","age":35,"is_pregnant":false,"symptoms":["mild headache"],"vitals":{"heart_rate":72,"respiratory_rate":16,"oxygen_saturation":98,"temperature":37.0,"blood_pressure":"120/80"}}'
+```
+
+Use the returned `encounter_id` to call `POST /api/triage/encounters/{encounter_id}/assess/` with the same bearer header. The current assessment endpoint returns HTTP `201`, including `approval_id`, `proposed_priority`, warnings, and the recommendation. Inspect `GET /api/triage/encounters/{encounter_id}/` for recorded status.
+
+To decide, use a clinician session and CSRF token, not the application bearer token: `POST /api/triage/approvals/{approval_id}/decide/` with `{"clinical_role":"NURSE","decision":"APPROVED","comments":"Reviewed synthetic case"}`. The supplied role must match the clinician's server-assigned role. Use `REJECTED` to reject a proposal. Reassessment is available at `POST /api/triage/encounters/{encounter_id}/reassess/`; clinician audit access is available at `GET /api/triage/encounters/{encounter_id}/audit/`. See the [integration guide](docs/integration.md) for credentials and the [evaluation protocol](EVALS.md) for synthetic scenarios; API examples here reflect the current implementation.
+
+## Limitations
+
+- Prototype only: no clinical deployment, KNH partnership, or measured patient-outcome benefit is claimed. Adult screening is not complete SATS, NEWS2, diagnosis, or treatment guidance.
+- Adult rules require known age at least 16 and exclude known pregnancy. Paediatric and obstetric pathways require separate clinical assessment. Validate all thresholds, input handling, and local protocols before use.
+- Deterministic screening can run without an LLM, but the triage summary node currently calls Groq. Setting `USE_LOCAL_MODEL=true` alone does not prevent cloud calls from that node; local-only inference requires wiring and verification.
+- The reused clinical-analysis prompt can generate diagnostic/advisory content. A dedicated triage-only prompt and output safeguards are needed before claiming summaries never contain diagnosis or medication advice.
+- No automatic de-identification, continuous monitoring, external retrieval, autonomous queue management, or committed referral workflow is implemented. Free text must be de-identified by callers.
+- Tool schemas, alias handling, missing-data handling, request limits, and tenant/object-level authorisation require further hardening. Audit permissions restrict ordinary users but do not make records tamper-proof against privileged database access.
+- Approval freshness and expiry checks run before the commit lock; concurrent clinical updates require additional protection and testing. SQLite does not provide PostgreSQL-equivalent row locking.
+- Self-registration lacks email verification. Production needs identity verification, abuse prevention, operational security review, and Kenyan data-protection compliance assessment. Synthetic tests are not clinical validation.
+
+## Future improvements
+
+- Validate the workflow with Kenyan clinicians and seek a facility-approved pilot, including KNH only through an established collaboration.
+- Align screening, escalation, and referral configuration with locally approved protocols; evaluate prioritisation accuracy, staff workload, and time to clinician review.
+- Connect and verify local Ollama inference, introduce a triage-only summary schema, and enforce reliable provider and workflow deadlines.
+- Harden authorisation, input validation, approval concurrency, and audit integrity before multi-facility use.
+- Integrate approved EMR/HIS interfaces and facility-specific referral pathways; add paediatric or obstetric support only after clinical validation.
+- Implement approved external MCP reference retrieval only with source controls, privacy safeguards, and explicit provenance. Add continuous monitoring only as a separately validated workflow.
+
 ## Deploy to Render
 
 The repository includes a Render Blueprint in `render.yaml` and a `build.sh` build script. Push these files to your Git repository, then in Render choose **New + → Blueprint**, connect the repository, and apply the Blueprint. It creates a Python web service and a persistent PostgreSQL database. The selected smallest persistent web/database plans are paid Render resources; review Render's current pricing before applying.
@@ -37,8 +171,11 @@ The start command applies outstanding database migrations before launching Gunic
 Install the declared dependencies and apply Django migrations:
 
 ```sh
+python -m venv .venv
+source .venv/bin/activate
 python -m pip install -r requirements.txt
 python manage.py migrate
+python manage.py runserver
 ```
 
 Copy `.env.example` to `.env` and set `GROQ_API_KEY` to a key obtained from the Groq Console. `.env` is ignored by Git. Never put the key in frontend code or commit it. Configure `GROQ_MODELS` as a comma-separated list of model IDs; the service randomly chooses one for each analysis request. The legacy `GROQ_MODEL` setting is still accepted when `GROQ_MODELS` is unset. Set `DJANGO_SECRET_KEY` to a stable secret in deployed environments; when it is absent, Django generates a development-only key at startup.
@@ -155,3 +292,11 @@ python manage.py test clinicalDecisionAI
 ```
 
 Groq is mocked in automated tests; tests do not make provider requests.
+
+Run the focused triage suite with:
+
+```sh
+python manage.py test clinicalDecisionAI.triage --verbosity=2
+```
+
+Additional project documentation: [evaluation protocol](EVALS.md), [architecture design](ARCHITECTURE.md), and [compliance audit](COMPLIANCE_AUDIT.md). Documentation checklists and synthetic test results do not establish clinical safety or regulatory approval. The project is MIT licensed; see [LICENSE](LICENSE).
