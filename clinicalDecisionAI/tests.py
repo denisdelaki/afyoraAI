@@ -986,6 +986,7 @@ class AccountIntegrationFlowTests(TestCase):
 			self.assertEqual(response.status_code, 200)
 		self.assertEqual(ClinicalRole.objects.get(user=user).role, ClinicalRole.NURSE)
 		self.assertContains(response, 'Nurse / Triage Clinician')
+		self.assertNotContains(response, '{{ request.user.clinical_role')
 
 	@override_settings(DEBUG=True)
 	def test_sandbox_preserves_existing_clinical_role(self):
@@ -1008,6 +1009,8 @@ class AccountIntegrationFlowTests(TestCase):
 		response = self.client.get('/sandbox/')
 		self.assertEqual(response.status_code, 200)
 		self.assertFalse(ClinicalRole.objects.filter(user=user).exists())
+		self.assertContains(response, '<strong>Not assigned</strong>', html=True)
+		self.assertNotContains(response, '{{ request.user.clinical_role')
 
 	@patch('clinicalDecisionAI.views.run_clinical_analysis')
 	def test_sandbox_runs_validated_analysis_without_application_token(self, analyze):
