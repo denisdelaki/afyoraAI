@@ -314,10 +314,7 @@ shortness of breath</textarea
         </div>
         <p class="muted">
           Clinical role:
-          <strong
-            >{{ request.user.clinical_role.get_role_display|default:"Not
-            assigned" }}</strong
-          >
+          <strong>{{ request.user.clinical_role.get_role_display|default:"Not assigned" }}</strong>
         </p>
         <p class="muted" style="margin: 0 0 12px">
           In production, a nurse or doctor with a clinical role approves via the
